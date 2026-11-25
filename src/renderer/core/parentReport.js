@@ -39,7 +39,8 @@ export function parentReportHtml(r, { note = '', teacher = '', logo = '' } = {})
   const days = r.activity.days.slice(-28);
   const studied = days.filter((d) => (d.puzzles || 0) + (d.reviews || 0) + (d.openings || 0) + (d.gtmMoves || 0) + (d.playGames || 0) > 0).length;
   const solved28 = days.reduce((a, d) => a + (d.puzzles || 0) + (d.reviews || 0), 0);
-  const ph = (r.ratings.puzzles.history || []).filter((p) => p.t >= now - 90 * DAY);
+  // rating history is stored as [time, rating] pairs
+  const ph = (r.ratings.puzzles.history || []).map((p) => (Array.isArray(p) ? { t: p[0], r: p[1] } : p)).filter((p) => p.t >= now - 90 * DAY);
   const before = (r.ratings.puzzles.history || []).filter((p) => p.t <= now - 28 * DAY).pop();
   const change = before ? r.ratings.puzzles.r - Math.round(before.r) : null;
   const strong = r.puzzles.themes.filter((t) => t.verdict === 'guclu').sort((a, b) => b.diff - a.diff).slice(0, 3);
