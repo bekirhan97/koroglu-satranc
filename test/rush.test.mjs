@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SeqRun, rampPuzzles, MODES } from '../src/renderer/modules/puzzles/rush.js';
+import { SeqRun, rampPuzzles, rampTarget, MODES } from '../src/renderer/modules/puzzles/rush.js';
 
 test('Rush: 3 can, üçüncü yanlışta biter', () => {
   const r = new SeqRun('rush3', 0);
@@ -30,4 +30,11 @@ test('Rampa: tekrarsız ve artan zorlukta', () => {
   const list = rampPuzzles(db, MODES.streak, 40);
   assert.equal(new Set(list.map((p) => p.id)).size, list.length);
   assert.ok(list[30].rating > list[0].rating + 500);
+});
+test('Rampa: başta hızlı, sonra yavaş artar', () => {
+  for (const m of Object.values(MODES)) {
+    const d = (i) => rampTarget(m, i + 1) - rampTarget(m, i);
+    assert.ok(d(0) > d(10) && d(10) > d(40) && d(40) > 0);
+  }
+  assert.equal(rampTarget(MODES.rush3, 0), 600);
 });

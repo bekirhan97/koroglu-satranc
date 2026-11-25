@@ -11,18 +11,23 @@ import { pdata, pickFrom } from './data.js';
 const api = window.api;
 
 export const MODES = {
-  rush3: { kind: 'rush', label: '3 dakika', minutes: 3, lives: 3, start: 600, step: 35 },
-  rush5: { kind: 'rush', label: '5 dakika', minutes: 5, lives: 3, start: 600, step: 30 },
-  survival: { kind: 'rush', label: 'Hayatta kal', minutes: 0, lives: 3, start: 600, step: 30 },
-  streak: { kind: 'streak', label: 'Streak', minutes: 0, lives: 1, start: 800, step: 30, skips: 1 },
+  // Difficulty climbs fast at first, then ever more slowly: start + gain * ln(1 + i / 5).
+  rush3: { kind: 'rush', label: '3 dakika', minutes: 3, lives: 3, start: 600, gain: 480 },
+  rush5: { kind: 'rush', label: '5 dakika', minutes: 5, lives: 3, start: 600, gain: 440 },
+  survival: { kind: 'rush', label: 'Hayatta kal', minutes: 0, lives: 3, start: 600, gain: 440 },
+  streak: { kind: 'streak', label: 'Streak', minutes: 0, lives: 1, start: 800, gain: 380, skips: 1 },
 };
 export const RUSH_KEYS = ['rush3', 'rush5', 'survival'];
 const MAX_RATING = 2800;
 
-export function rampPuzzles(db, { start, step }, count = 250, random = Math.random) {
+export function rampTarget({ start, gain }, i) {
+  return Math.min(MAX_RATING, Math.round(start + gain * Math.log(1 + i / 5)));
+}
+
+export function rampPuzzles(db, mode, count = 250, random = Math.random) {
   const seen = new Set(), out = [];
   for (let i = 0; i < count; i++) {
-    const p = pickFrom(db, { target: Math.min(MAX_RATING, start + i * step), seen, random });
+    const p = pickFrom(db, { target: rampTarget(mode, i), seen, random });
     if (!p) break;
     seen.add(p.id); out.push(p);
   }
