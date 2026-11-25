@@ -37,6 +37,11 @@
   .nav-item { flex: 1; flex-direction: column; gap: 2px; padding: 6px 2px; font-size: 11px; justify-content: center; align-items: center; text-align: center; }
   .nav-item .nav-icon { font-size: 20px; }
   .nav-item.active { box-shadow: inset 0 3px 0 var(--gold); }
+  .sidebar .nav-more-item { display: none; }
+  .sidebar.more-open .more-menu { display: flex; }
+  .more-menu { position: fixed; right: 8px; bottom: 70px; flex-direction: column; background: var(--side); border-radius: 12px; padding: 6px; min-width: 210px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  .more-item { display: flex; gap: 12px; align-items: center; background: none; border: 0; color: var(--side-ink); padding: 12px 14px; border-radius: 8px; font-size: 15px; text-align: left; }
+  .more-item.active { color: var(--gold); background: rgba(217,168,75,.12); }
   .module-head { flex-direction: column; align-items: stretch; gap: 8px; }
   .module-head .tabs { flex: none; }
   .rating-pill { white-space: nowrap; }
@@ -47,7 +52,20 @@
   .modal { min-width: 0; width: calc(100vw - 24px); max-height: 90dvh; overflow: auto; }
   .two-col, .pkg-page { grid-template-columns: 1fr !important; display: block; }
   .two-col > *, .pkg-page > * { margin-bottom: 12px; }
-  .storm-layout, .pz-layout, .gtm-layout { grid-template-columns: 1fr !important; }
+  .storm-layout, .pz-layout, .gtm-layout, .setup { grid-template-columns: 1fr !important; height: auto; }
+  .module { height: auto; }
+  .toolbar { flex-wrap: wrap; }
+  .toolbar .search { min-width: 0; flex: 1 1 160px; }
+  table.gtm-games th:nth-child(1), table.gtm-games td:nth-child(1),
+  table.gtm-games th:nth-child(4), table.gtm-games td:nth-child(4),
+  table.gtm-games th:nth-child(6), table.gtm-games td:nth-child(6) { display: none; }
+  table.games.students th:nth-child(5), table.games.students td:nth-child(5),
+  table.games.students th:nth-child(6), table.games.students td:nth-child(6) { display: none; }
+  .gtm-left, .gtm-right { overflow: visible; }
+  .gtm-center { order: -1; }
+  .set-card { flex-wrap: wrap; gap: 10px; }
+  .set-card > div:first-child { flex: 1 1 100%; }
+  .set-actions, .rep-card .set-actions { flex-wrap: wrap; flex-shrink: 1; max-width: 100%; justify-content: flex-start; }
   .hero { flex-direction: column; align-items: flex-start; gap: 10px; }
   .table-host { overflow-x: auto; }
 }
@@ -64,3 +82,30 @@
   .login-card { padding: 22px 18px; }
 }
 .rating-pill { white-space: nowrap; }
+
+/* ---------- videos ---------- */
+.videos-page .toolbar { flex-wrap: wrap; }
+.video-topic { margin-bottom: 18px; }
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.video-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.video-card.watched { opacity: .8; }
+.video-thumb { position: relative; border: 0; padding: 0; background: #000; aspect-ratio: 16 / 9; display: block; width: 100%; }
+.video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.video-thumb .play { position: absolute; inset: 0; margin: auto; width: 52px; height: 52px; border-radius: 50%; background: rgba(122,20,38,.9); color: #fff; display: grid; place-items: center; font-size: 20px; }
+.watched-badge { position: absolute; left: 8px; top: 8px; background: var(--good); color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 10px; }
+.video-info { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.video-title { font-weight: 600; }
+.video-view { max-width: 960px; }
+.video-frame { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; }
+.video-frame iframe, .video-frame > div { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video-h { margin: 14px 0 6px; }
+.video-note { white-space: pre-wrap; }
+.video-prev img { width: 240px; border-radius: 8px; }
+
+/* ---------- Lichess ---------- */
+.nav-more, .more-menu, .nav-short { display: none; }
+@media (max-width: 860px) { .sidebar .nav-label { display: none; } .sidebar .nav-short { display: inline; } }
+@media (max-width: 860px) { .nav-more { display: flex; } }
+.lichess-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-color: var(--gold); }
+.lichess-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lichess-perf { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; }

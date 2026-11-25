@@ -172,7 +172,7 @@ export class ListView {
     rowData.sort((a, b) => (val(a) > val(b) ? d : val(a) < val(b) ? -d : 0));
     const th = (label, key) => h('th', { class: key ? 'sortable' + (k === key ? ' sorted' : '') : '', onclick: key ? () => { this.sort = { key, dir: k === key ? -d : -1 }; this.renderTable(); } : null },
       label, k === key ? (d > 0 ? ' ▲' : ' ▼') : '');
-    host.append(h('table.games',
+    host.append(h('table.games.gtm-games',
       h('thead', h('tr', th('Son (Ort. Skor)', 'last'), th('Oyuncular', 'players'), th('Sonuç'), th('Açılış', 'opening'), th('Zorluk', 'diff'), th('Hamle', 'moves'), th(''))),
       h('tbody', rowData.map(({ g, last, avg, active }) => {
         const H = g.headers;

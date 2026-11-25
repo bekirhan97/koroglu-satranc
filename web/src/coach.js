@@ -3,6 +3,7 @@
 import { supa, hesap, cleanUsername } from './supa.js';
 import { h, clear, modal, toast, fmtDate } from '../../src/renderer/core/dom.js';
 import { students, packageSummary } from '../../src/renderer/core/assign.js';
+import { videoStore } from './videos.js';
 
 export async function syncReports() {
   const { data, error } = await supa.from('reports').select('student_id, report');
@@ -27,6 +28,7 @@ const randomPassword = () => { const w = 'abcdefghjkmnpqrstuvwxyz'; let s = ''; 
 export function accountsHooks(me) {
   return {
     syncReports,
+    videoList: () => videoStore.load(true),
 
     // "Hesaplar" tab: list, create, rename/regroup, reset password, delete.
     async accountsTab(body, { onChange } = {}) {

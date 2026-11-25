@@ -6,7 +6,7 @@ const out = 'web/dist';
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out + '/data', { recursive: true });
 await esbuild.build({
-  entryPoints: { app: 'web/src/main.js' },
+  entryPoints: { app: 'web/src/main.js', 'maia-worker': 'src/renderer/core/maia-worker.js' },
   bundle: true,
   outdir: out,
   format: 'esm',
@@ -17,6 +17,10 @@ await esbuild.build({
   logLevel: 'info',
 });
 fs.copyFileSync('resources/puzzles.json', out + '/data/puzzles.json');
+fs.copyFileSync('resources/openings.json', out + '/data/openings.json');
+fs.copyFileSync('resources/miniatures.pgn', out + '/data/miniatures.pgn');
+fs.cpSync('resources/maia', out + '/data/maia', { recursive: true });
+fs.cpSync('web/vendor/stockfish', out + '/engine', { recursive: true });
 fs.copyFileSync('build-src/icon.png', out + '/icon.png');
 const v = Date.now().toString(36);
 fs.writeFileSync(out + '/index.html', `<!doctype html>

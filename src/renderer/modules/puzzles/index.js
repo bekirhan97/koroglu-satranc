@@ -29,7 +29,7 @@ export default {
     clear(root).append(h('div.module', h('div.module-head', h('h2', this.title), tabsHost), body));
     const swap = (v) => { if (current && current.destroy) current.destroy(); current = v; };
     const setTabs = (active) => clear(tabsHost).append(...[
-      ['train', 'Antrenman', showTrain], ['storm', '⚡ Storm', showStormTab], ['rush', '🏃 Rush', showRushTab], ['streak', '🔥 Streak', showStreakTab], ...(window.api.web ? [] : [['mine', 'Oyunlarım', showMineTab]]), ['review', 'Tekrar', showReview], ['themes', 'Temalar', showThemes], ['sets', 'Setlerim', showSets], ['stats', 'İstatistikler', showStats],
+      ['train', 'Antrenman', showTrain], ['storm', '⚡ Storm', showStormTab], ['rush', '🏃 Rush', showRushTab], ['streak', '🔥 Streak', showStreakTab], ['mine', 'Oyunlarım', showMineTab], ['review', 'Tekrar', showReview], ['themes', 'Temalar', showThemes], ['sets', 'Setlerim', showSets], ['stats', 'İstatistikler', showStats],
     ].map(([k, l, f]) => h('button.tab' + (active === k ? '.active' : ''), { onclick: f }, l,
       k === 'review' && dueReviews().length ? h('span.count', dueReviews().length) : null)),
     pill);

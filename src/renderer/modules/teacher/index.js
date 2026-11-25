@@ -124,6 +124,7 @@ export default {
           h('div.daybars', days.map((d) => h('div.daybar', { title: `${d.key}: ${d.puzzles || 0} bulmaca, ${d.reviews || 0} tekrar, ${d.openings || 0} açılış pozisyonu, ${d.gtmMoves || 0} tahmin, ${d.playGames || 0} oyun` },
             h('span', { style: { height: `${dayTotal(d) ? 8 + (92 * dayTotal(d)) / maxDay : 0}%` } }), h('i', d.key.slice(8))))),
           goal ? h('div.muted.small', 'Günlük hedef: ' + GOAL_KINDS.filter(([k]) => goal[k] > 0).map(([k, unit]) => `${goal[k]} ${unit}`).join(', ') + (goal.from === 'self' ? ' (öğrencinin kendi hedefi)' : '')) : null),
+        r.lichess && r.lichess.username ? lichessPanel(r.lichess) : null,
         r.badges && Object.keys(r.badges).length ? h('div.panel', h('div.panel-title', `Rozetler (${Object.keys(r.badges).length}/${BADGES.length})`),
           h('div.badge-row', BADGES.filter((b) => r.badges[b.id]).map((b) => h('span.badge-chip', { title: `${b.desc} · ${fmtDate(r.badges[b.id])}` }, b.icon, ' ', b.name)))) : null,
         r.exams && Object.values(r.exams).some((e) => e.finishedAt) ? h('div.panel', h('div.panel-title', 'Sınavlar'),
@@ -177,11 +178,24 @@ export default {
       });
     }
 
+    function lichessPanel(l) {
+      const perfs = [['bullet', 'Bullet'], ['blitz', 'Blitz'], ['rapid', 'Rapid'], ['classical', 'Klasik'], ['puzzle', 'Bulmaca']].filter(([k]) => l.perfs && l.perfs[k] && l.perfs[k].games);
+      const url = `https://lichess.org/@/${l.username}`;
+      return h('div.panel.lichess-panel', h('div.panel-title', 'Lichess'),
+        h('div.lichess-row', h('b', '@' + l.username),
+          perfs.map(([k, label]) => h('span.lichess-perf', h('span.muted.small', label), h('b', l.perfs[k].rating), l.perfs[k].prov ? '?' : '', h('span.muted.small', ` (${l.perfs[k].games})`))),
+          h('span.spacer'),
+          h('button.btn.small', { onclick: () => api.openExternal(url) }, 'Profili ↗'),
+          h('button.btn.small', { onclick: () => api.openExternal(`https://lichess.org/@/${l.username}/all`) }, 'Oyunları ↗'),
+          h('button.btn.small.primary', { onclick: () => api.openExternal(`https://lichess.org/?user=${l.username}#friend`) }, 'Maç teklif et ↗')),
+        l.fetchedAt ? h('div.muted.small', `Puanlar ${fmtDate(l.fetchedAt)} tarihli`) : null);
+    }
+
     // ---------- package builder ----------
     function showPackage() {
       setTabs('package');
       const f = { title: '', note: '', due: '', goal: { puzzles: 10, openings: 0, gtmGames: 0, playGames: 0 }, games: new Set(), sets: new Set(), reps: new Set(), themeSets: [], links: [],
-        exam: { on: false, title: '', minutes: 30, pz: { mode: 'theme', theme: '', count: 10, min: 900, max: 1600, setId: '' }, gtmGameId: '', repId: '', openingCount: 10 } };
+        videos: new Set(), exam: { on: false, title: '', minutes: 30, pz: { mode: 'theme', theme: '', count: 10, min: 900, max: 1600, setId: '' }, gtmGameId: '', repId: '', openingCount: 10 } };
       const summary = h('div.pkg-summary');
       const refresh = () => {
         const nGames = f.games.size;
@@ -189,8 +203,9 @@ export default {
         clear(summary).append(h('div.panel-title', 'Paket özeti'),
           h('ul', nGames ? h('li', `${nGames} Tahmin Et oyunu`) : null, nPz ? h('li', `${nPz} bulmaca`) : null, f.reps.size ? h('li', `${f.reps.size} açılış repertuvarı`) : null,
             f.links.length ? h('li', `${f.links.length} Lichess bağlantısı`) : null,
+            f.videos.size ? h('li', `${f.videos.size} video`) : null,
             f.exam.on ? h('li', `Sınav (${f.exam.minutes} dk)`) : null,
-            !nGames && !nPz && !f.reps.size && !f.links.length ? h('li.muted', 'Henüz içerik seçilmedi') : null),
+            !nGames && !nPz && !f.reps.size && !f.links.length && !f.videos.size ? h('li.muted', 'Henüz içerik seçilmedi') : null),
           h('button.btn.primary.big', { onclick: save }, api.web ? 'Öğrencilere gönder…' : 'Paketi kaydet…'),
           h('p.muted.small', api.web ? 'Sonraki adımda ödevin hangi öğrencilere (ya da gruplara) gideceğini seçersiniz. Öğrenci siteye girdiğinde ödevi Ana Sayfa\'da görür.' : 'Kaydettiğiniz .kpaket dosyasını öğrencilerinize WhatsApp, e-posta ya da USB ile gönderin. Öğrenci dosyaya çift tıklayınca ödev uygulamasına eklenir.'));
       };
@@ -240,13 +255,22 @@ export default {
                 numIn(e.pz.count, (v) => { e.pz.count = Math.max(0, Math.min(50, v)); }), h('span.muted', 'soru,'), numIn(e.pz.min, (v) => { e.pz.min = v; }), h('span.muted', '–'), numIn(e.pz.max, (v) => { e.pz.max = v; }), h('span.muted', 'puan')]
               : [sel([['', 'Set seçin'], ...pdata.sets.filter((s) => !s.assignment).map((s) => [s.id, `${s.name} (${s.puzzles.length})`])], e.pz.setId, (v) => { e.pz.setId = v; }),
                 numIn(e.pz.count, (v) => { e.pz.count = Math.max(1, v); }), h('span.muted', 'soru')]),
-          api.web ? null : h('div.form-l', 'Hamleyi Tahmin Et'),
-          api.web ? null : h('div.theme-row', sel([['', 'Yok'], ...analysed.map((g) => [g.id, `${g.headers.White} – ${g.headers.Black}`])], e.gtmGameId, (v) => { e.gtmGameId = v; }),
+          h('div.form-l', 'Hamleyi Tahmin Et'),
+          h('div.theme-row', sel([['', 'Yok'], ...analysed.map((g) => [g.id, `${g.headers.White} – ${g.headers.Black}`])], e.gtmGameId, (v) => { e.gtmGameId = v; }),
             h('span.muted.small', analysed.length ? 'İlk 5 hamle sorulmaz, en fazla 25 hamle.' : 'Önce Hamleyi Tahmin Et\'te "Önceden analiz et" ile bir oyun hazırlayın.')),
-          api.web ? null : h('div.form-l', 'Açılış soruşturması'),
-          api.web ? null : h('div.theme-row', sel([['', 'Yok'], ...odata.reps.filter((r) => !r.assignment).map((r) => [r.id, r.name])], e.repId, (v) => { e.repId = v; }),
+          h('div.form-l', 'Açılış soruşturması'),
+          h('div.theme-row', sel([['', 'Yok'], ...odata.reps.filter((r) => !r.assignment).map((r) => [r.id, r.name])], e.repId, (v) => { e.repId = v; }),
             numIn(e.openingCount, (v) => { e.openingCount = Math.max(1, Math.min(40, v)); }), h('span.muted', 'pozisyon')));
       };
+
+      // videos (web only): the coach's library
+      let videoList = [];
+      const videosPanel = h('div.panel', h('div.panel-title', 'Videolar'), h('div.muted.small', 'Yükleniyor…'));
+      if (window.webHooks) window.webHooks.videoList().then((list) => {
+        videoList = list;
+        clear(videosPanel).append(h('div.panel-title', 'Videolar'),
+          list.length ? h('div.pick-list', list.map((v) => check(f.videos, v.id, v.title, v.topic || ''))) : h('div.muted.small', 'Kütüphanenizde video yok (Videolar → + Video ekle).'));
+      }).catch(() => {});
 
       const num = (k) => h('input.goal-in', { type: 'number', min: 0, max: 200, value: f.goal[k], onchange: (e) => { f.goal[k] = Math.max(0, +e.target.value || 0); } });
 
@@ -254,11 +278,11 @@ export default {
         const title = f.title.trim();
         if (!title) { toast('Pakete bir başlık verin', 'error'); return; }
         if (f.links.some((l) => !isLichessUrl(l.url))) { toast('Lichess bağlantıları https://lichess.org/ ile başlamalı', 'error'); return; }
-        if (!f.games.size && !f.sets.size && !f.themeSets.length && !f.reps.size && !f.links.length && !f.exam.on) { toast('Pakete en az bir içerik ekleyin', 'error'); return; }
+        if (!f.games.size && !f.sets.size && !f.themeSets.length && !f.reps.size && !f.links.length && !f.videos.size && !f.exam.on) { toast('Pakete en az bir içerik ekleyin', 'error'); return; }
         const due = f.due ? new Date(f.due + 'T23:59:59').getTime() : null;
         const goal = Object.values(f.goal).some((v) => v > 0) ? { ...f.goal } : null;
         toast('Paket hazırlanıyor…');
-        const pkg = await buildPackage({ title, note: f.note.trim(), due, goal, gtmGameIds: [...f.games], setIds: [...f.sets], themeSets: f.themeSets, repIds: [...f.reps], links: f.links, exam: f.exam.on ? {
+        const pkg = await buildPackage({ title, note: f.note.trim(), due, goal, gtmGameIds: [...f.games], setIds: [...f.sets], themeSets: f.themeSets, repIds: [...f.reps], links: f.links, videos: videoList.filter((v) => f.videos.has(v.id)).map((v) => ({ id: v.id, title: v.title, youtubeId: v.youtube_id })), exam: f.exam.on ? {
           title: f.exam.title.trim() || `${title} sınavı`, minutes: f.exam.minutes,
           puzzles: f.exam.pz.mode === 'set' ? (f.exam.pz.setId ? { setId: f.exam.pz.setId, count: f.exam.pz.count } : null) : (f.exam.pz.count > 0 ? { theme: f.exam.pz.theme, count: f.exam.pz.count, min: f.exam.pz.min, max: f.exam.pz.max } : null),
           gtmGameId: f.exam.gtmGameId, repId: f.exam.repId, openingCount: f.exam.openingCount } : null });
@@ -288,7 +312,7 @@ export default {
           h('div.panel', h('div.panel-title', '2. Günlük hedef'),
             h('p.muted.small', 'Öğrencinin her gün yapmasını istediğiniz çalışma. 0 bırakılan madde hedefe girmez. Bu paket öğrencinin önceki günlük hedefinin yerine geçer.'),
             h('div.goal-grid', GOAL_KINDS.map(([k, , label]) => h('label', num(k), h('span', label))))),
-          api.web ? null : h('div.panel', h('div.panel-title', '3. Hamleyi Tahmin Et oyunları'),
+          h('div.panel', h('div.panel-title', '3. Hamleyi Tahmin Et oyunları'),
             h('p.muted.small', 'Analizi yapılmış oyunlar ("zorluk" yazanlar) analiziyle birlikte gider; öğrenci beklemeden oynar.'), gamesBox),
           h('div.panel', h('div.panel-title', '4. Bulmacalar'),
             pdata.sets.length ? h('div.pick-list', pdata.sets.filter((s) => !s.assignment).map((s) => check(f.sets, s.id, s.name, `${s.puzzles.length} bulmaca`))) : h('div.muted.small', 'PGN bulmaca setiniz yok (Bulmacalar → Setlerim).'),
@@ -296,12 +320,13 @@ export default {
             h('p.muted.small', 'Seçtiğiniz temadan, verdiğiniz puan aralığında, kolaydan zora sıralı bulmacalar seçilir. Bütün öğrenciler aynı bulmacaları çözer.'),
             themeRows,
             h('button.btn.small', { onclick: () => { f.themeSets.push({ theme: 'fork', name: 'Çatal seçkisi', count: 15, min: 1000, max: 1600 }); drawThemes(); refresh(); } }, '+ Tema seçkisi ekle')),
-          api.web ? null : h('div.panel', h('div.panel-title', '5. Açılış repertuvarları'),
+          h('div.panel', h('div.panel-title', '5. Açılış repertuvarları'),
             odata.reps.filter((r) => !r.assignment).length ? h('div.pick-list', odata.reps.filter((r) => !r.assignment).map((r) => check(f.reps, r.id, r.name, `${r.color === 'w' ? 'Beyaz' : 'Siyah'} · ${r.lines} çizgi`))) : h('div.muted.small', 'Repertuvarınız yok (Açılış Tekrarı → Repertuvar İçe Aktar).')),
           h('div.panel', h('div.panel-title', '6. Lichess turnuvası / takımı'),
             h('p.muted.small', 'Hafta sonu turnuvası, takım ya da çalışma (study) bağlantısı ekleyin. Öğrenci ödevin içinden tek tıkla açar.'),
             linkRows,
             h('button.btn.small', { onclick: () => { f.links.push({ title: 'Hafta sonu turnuvası', url: '' }); drawLinks(); refresh(); } }, '+ Bağlantı ekle')),
+          window.webHooks ? videosPanel : null,
           examPanel()),
         h('div.pkg-side', h('div.panel', summary),
           sentPackages.list.length ? h('div.panel', h('div.panel-title', 'Gönderilen paketler'),

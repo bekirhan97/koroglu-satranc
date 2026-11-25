@@ -95,6 +95,7 @@ let job = null; // background analysis shared across visits: { running, done, to
 
 export async function showMyGames(body, { setActive }) {
   const d = await mine.load();
+  if (!d.user) { const l = await api.read('lichess', null); if (l && l.username) d.user = l.username; } // web: linked Lichess account
   let view = null;
   setActive(() => { if (view && view.destroy) view.destroy(); });
 

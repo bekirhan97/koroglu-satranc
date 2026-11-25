@@ -14,6 +14,12 @@ import { assignments, importPackage, assignmentProgress, buildReport } from '../
 import { refreshBadges } from '../../src/renderer/core/badges.js';
 import { pdata } from '../../src/renderer/modules/puzzles/data.js';
 import puzzles from '../../src/renderer/modules/puzzles/index.js';
+import gtm from '../../src/renderer/modules/gtm/index.js';
+import openings from '../../src/renderer/modules/openings/index.js';
+import play from '../../src/renderer/modules/play/index.js';
+import videos from './videos.js';
+import { loadOpenings } from '../../src/renderer/core/openings.js';
+import { startLink, finishLink, getLink, unlink, lichessSummary } from './lichess.js';
 import teacher from '../../src/renderer/modules/teacher/index.js';
 import { mountExam } from '../../src/renderer/modules/exam/index.js';
 import { accountsHooks, syncReports } from './coach.js';
@@ -24,7 +30,8 @@ let me = null;          // profiles row of the signed-in user
 let mounted = null;
 let activeId = 'home';
 teacher.title = 'Antrenör';
-const MODULES = [puzzles, teacher];
+gtm.short = 'Tahmin Et'; openings.short = 'Açılış'; play.short = 'Oyna'; puzzles.short = 'Bulmaca';
+const MODULES = [videos, puzzles, gtm, openings, play, teacher];
 const visibleModules = () => MODULES.filter((m) => !m.teacherOnly || (me && me.role === 'coach'));
 
 // ---------- login ----------
@@ -100,7 +107,11 @@ async function start() {
   store.settings.teacherMode = me.role === 'coach';
   await Promise.all([pdata.load(), activity.load(), assignments.load()]);
   window.webHooks = me.role === 'coach' ? accountsHooks(me) : null;
-  if (me.role === 'student') { await syncAssignments(); scheduleReport(5000); }
+  loadOpenings().catch(() => {});
+  const lr = await finishLink();
+  if (lr && lr.error) toast(lr.error, 'error');
+  if (lr && lr.username) toast(`Lichess hesabınız bağlandı: @${lr.username}`, 'ok');
+  if (me.role === 'student') { await syncAssignments(); scheduleReport(lr && lr.username ? 1000 : 5000); }
   if (me.role === 'coach') await syncReports();
   go('home');
 }
@@ -129,6 +140,7 @@ function scheduleReport(delay = 30000) {
 async function sendReport() {
   try {
     const r = await buildReport();
+    r.lichess = await lichessSummary().catch(() => null);
     const { error } = await supa.from('reports').upsert({ student_id: me.id, report: r, updated_at: new Date().toISOString() });
     if (error) console.error('Rapor gönderilemedi', error);
   } catch (e) { console.error(e); }
@@ -138,17 +150,26 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 // ---------- shell ----------
 function nav() {
-  const item = (id, icon, title) => h('button.nav-item' + (activeId === id ? '.active' : ''), { onclick: () => go(id) }, h('span.nav-icon', icon), h('span.nav-label', title));
-  return h('aside.sidebar',
+  // On phones only the first few items fit in the bottom bar; the rest open from "Diğer".
+  const primary = new Set(me.role === 'coach' ? ['home', 'teacher', 'videos', 'puzzles'] : ['home', 'puzzles', 'videos', 'gtm']);
+  const item = (id, icon, title, short) => h('button.nav-item' + (activeId === id ? '.active' : '') + (primary.has(id) ? '' : '.nav-more-item'),
+    { onclick: () => { side.classList.remove('more-open'); go(id); } }, h('span.nav-icon', icon), h('span.nav-label', title), h('span.nav-short', short || title));
+  const moreActive = !primary.has(activeId);
+  const side = h('aside.sidebar',
     h('div.brand', h('img.brand-logo', { src: brandLogo, alt: '' }), h('div', h('div.brand-name', 'Köroğlu'), h('div.brand-sub', 'Satranç Akademi'))),
     item('home', '⌂', 'Ana Sayfa'),
     h('div.nav-sep', 'Çalışma'),
-    visibleModules().map((m) => item(m.id, m.icon, m.title)),
+    visibleModules().map((m) => item(m.id, m.icon, m.title, m.short)),
     h('div.nav-fill'),
     item('settings', '⚙', 'Ayarlar'),
+    h('button.nav-item.nav-more' + (moreActive ? '.active' : ''), { onclick: (e) => { e.stopPropagation(); side.classList.toggle('more-open'); } }, h('span.nav-icon', '☰'), h('span.nav-label', 'Diğer'), h('span.nav-short', 'Diğer')),
+    h('div.more-menu', [...visibleModules().filter((m) => !primary.has(m.id)).map((m) => [m.id, m.icon, m.title]), ['settings', '⚙', 'Ayarlar']].map(([id, icon, title]) =>
+      h('button.more-item' + (activeId === id ? '.active' : ''), { onclick: () => { side.classList.remove('more-open'); go(id); } }, h('span', icon), h('span', title)))),
     h('div.profile-chip', me.display_name, h('div.muted.small', me.role === 'coach' ? 'Antrenör' : `@${me.username}`)),
     saveDot);
+  return side;
 }
+document.addEventListener('click', (e) => { const s = document.querySelector('.sidebar.more-open'); if (s && !s.contains(e.target)) s.classList.remove('more-open'); });
 const saveDot = h('div.save-state');
 onSaveState(({ pending, errors }) => {
   saveDot.textContent = errors ? '⚠ Kaydedilemedi, tekrar denenecek' : pending ? 'Kaydediliyor…' : '';
@@ -166,6 +187,11 @@ function go(id) {
   window.scrollTo(0, 0);
   if (id === 'home') return renderHome(content);
   if (id === 'settings') return renderSettings(content);
+  if (id.startsWith('videos:')) {
+    activeId = 'videos'; layout(content);
+    videos.mount(content, { go, open: id.slice(7) }).then((r) => { mounted = r; });
+    return;
+  }
   if (id.startsWith('exam:')) {
     const a = assignments.list.find((x) => x.id === id.slice(5));
     if (!a || !a.exam) return renderHome(content);
@@ -185,14 +211,17 @@ async function renderHome(root) {
   const today = h('div.today');
   const asgHost = h('div.asg-host');
   const badgeHost = h('div.badge-host');
+  const lichessHost = h('div');
+  getLink().then((l) => { if (!l && me.role === 'student') lichessHost.append(h('div.panel.lichess-cta', h('div', h('b', '♞ Lichess hesabını bağla'), h('div.muted.small', 'Antrenörün Lichess puanını ve oyunlarını görsün, kendi oyunlarından bulmaca çıkaralım.')),
+    h('button.btn.primary', { onclick: () => startLink() }, 'Lichess ile bağlan'))); });
   root.append(h('div.home',
     h('div.hero', h('div', h('h1', `Hoş geldin, ${me.display_name.split(' ')[0]}`), h('p.muted', me.role === 'coach' ? 'Öğrencilerin ve ödevler Antrenör bölümünde.' : 'Bugün ne çalışmak istersin?')),
       me.role === 'coach' ? h('div.hero-actions', h('button.btn.primary', { onclick: () => go('teacher') }, 'Öğrencilerim')) : null),
     me.role === 'student' ? today : null,
-    asgHost, badgeHost,
+    asgHost, lichessHost, badgeHost,
     h('div.module-grid', visibleModules().map((m) => h('button.module-card', { onclick: () => go(m.id) },
       h('div.mc-icon', m.icon), h('div.mc-title', m.id === 'teacher' ? 'Antrenör' : m.title),
-      h('div.mc-desc', m.id === 'teacher' ? 'Öğrenci hesapları, ödev verme ve öğrencilerin ilerlemesi.' : 'Antrenman, Storm, Rush, Streak, tekrar ve tema analizi. Puanınıza uygun bulmacalar.'),
+      h('div.mc-desc', m.id === 'teacher' ? 'Öğrenci hesapları, ödev verme, videolar ve öğrencilerin ilerlemesi.' : m.id === 'puzzles' ? 'Antrenman, Storm, Rush, Streak, kendi oyunlarından bulmaca, tekrar ve tema analizi.' : m.description),
       m.homeInfo ? infoSlot(m) : null)))));
   if (me.role === 'student') { renderToday(today); renderAssignments(asgHost); renderBadges(badgeHost); }
 }
@@ -248,7 +277,7 @@ async function renderAssignments(host) {
         a.note ? h('div.asg-note', a.note) : null,
         h('div.asg-parts', pr.parts.map((x) => x.kind === 'exam'
             ? h('button.asg-part.exam' + (x.done ? '.done' : ''), { onclick: () => go('exam:' + a.id) }, x.done ? `📝 ${x.label} · sonuç` : '📝 Sınava gir')
-            : h('button.asg-part', { onclick: () => go(x.kind === 'sets' ? 'puzzles' : 'home') }, `${x.done}/${x.total} ${x.label}`)),
+            : h('button.asg-part', { onclick: () => go(x.kind === 'sets' ? 'puzzles' : x.kind === 'gtm' ? 'gtm' : x.kind === 'reps' ? 'openings' : x.kind === 'videos' ? (a.videos.length === 1 ? 'videos:' + a.videos[0].id : 'videos') : 'home') }, `${x.done}/${x.total} ${x.label}`)),
           (a.links || []).map((l) => h('button.asg-part.lichess', { title: l.url, onclick: () => window.api.openExternal(l.url) }, '♞ ', l.title, ' ↗')))),
       h('div.asg-pct', h('div.ring', { style: { '--p': Math.round(100 * pr.pct) } }, h('span', `%${Math.round(100 * pr.pct)}`)))));
   }
@@ -262,12 +291,21 @@ async function renderSettings(root) {
   const teacherGoal = tg && tg.from === 'teacher' ? tg : null;
   const row = (label, control, hint) => h('div.set-row', h('div', h('div.set-label', label), hint ? h('div.muted.small', hint) : null), control);
   const save = () => { store.saveSettings(); toast('Kaydedildi', 'ok'); };
+  const lichessBox = h('div.btn-row');
+  const drawLichess = async () => {
+    const l = await getLink();
+    clear(lichessBox).append(...(l
+      ? [h('b', '@' + l.username), h('button.btn.small.ghost', { onclick: async () => { await unlink(); toast('Lichess bağlantısı kaldırıldı'); drawLichess(); scheduleReport(1000); } }, 'Bağlantıyı kaldır')]
+      : [h('button.btn.small.primary', { onclick: () => startLink() }, 'Lichess ile bağlan')]));
+  };
+  drawLichess();
   root.append(h('div.module', h('div.module-head', h('h2', 'Ayarlar')),
     h('div.settings',
       h('div.panel', h('div.panel-title', 'Hesap'),
         row('Ad', h('span', me.display_name), me.role === 'student' ? 'Adınızı antrenörünüz değiştirebilir.' : null),
         row('Kullanıcı adı', h('span', '@' + me.username)),
         row('Şifre', h('button.btn.small', { onclick: changePassword }, 'Şifremi değiştir')),
+        row('Lichess hesabı', lichessBox, 'Lichess\'in kendi giriş sayfası açılır; şifreniz bize gelmez. Yalnızca kullanıcı adınız ve puanlarınız alınır.'),
         row('Çıkış', h('button.btn.small', { onclick: logout }, 'Çıkış yap'), 'Ortak kullanılan bir cihazdaysanız çıkış yapmayı unutmayın.')),
       me.role === 'student' ? h('div.panel',
         h('div.panel-title', 'Günlük hedef'),

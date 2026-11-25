@@ -2,6 +2,7 @@
 // here each "file" is a row in the kv table (user_id, key, value). All rows are loaded once at login
 // and kept in memory; writes go to the server in the background (debounced per key).
 import { supa } from './supa.js';
+import { engine } from './engine.js';
 
 const cache = new Map();
 const pending = new Map(); // key -> timer
@@ -83,8 +84,21 @@ window.api = {
     if (!puzzleText) puzzleText = await fetch('data/puzzles.json').then((r) => { if (!r.ok) throw new Error('Bulmacalar yüklenemedi'); return r.text(); });
     return puzzleText;
   },
-  openings: async () => fetch('data/openings.json').then((r) => r.text()),
-  miniatures: async () => '',
+  openings: async () => fetch('data/openings.json').then((r) => r.json()),
+  miniatures: async () => fetch('data/miniatures.pgn').then((r) => r.text()),
+  maiaTables: async () => fetch('data/maia/tables.json').then((r) => r.json()),
+  maiaWeights: async (elo) => new Uint8Array(await fetch(`data/maia/maia-${+elo}.bin`).then((r) => { if (!r.ok) throw new Error('Maia ağı yüklenemedi'); return r.arrayBuffer(); })),
+  lichessGames: async (user, max) => {
+    if (!/^[\w-]{2,30}$/.test(String(user))) return { error: 'Geçersiz kullanıcı adı' };
+    const url = `https://lichess.org/api/games/user/${encodeURIComponent(user)}?max=${Math.min(100, +max || 30)}&moves=true&opening=false&clocks=false&evals=false&perfType=bullet,blitz,rapid,classical,correspondence`;
+    try {
+      const r = await fetch(url, { headers: { Accept: 'application/x-ndjson' } });
+      if (r.status === 404) return { error: 'Bu kullanıcı Lichess\'te bulunamadı' };
+      if (r.status === 429) return { error: 'Lichess şu an çok yoğun; bir dakika sonra tekrar deneyin' };
+      if (!r.ok) return { error: `Lichess yanıt vermedi (${r.status})` };
+      return { text: await r.text() };
+    } catch (e) { return { error: 'Lichess\'e bağlanılamadı. İnternet bağlantınızı kontrol edin.' }; }
+  },
   appInfo: async () => ({ version: 'web', dataDir: '', backupDir: '' }),
   openExternal: (url) => { window.open(url, '_blank', 'noopener'); },
   log: (level, msg) => (level === 'error' ? console.error(msg) : console.log(msg)),
@@ -103,7 +117,10 @@ window.api = {
     return null;
   },
   showFile: () => {},
-  // engine and desktop-only features are not used by the web build
-  analyse: async () => { throw new Error('Motor web sürümünde henüz yok'); },
-  cancel: () => {},
+  // Stockfish (WASM, ./engine.js)
+  analyse: (req, priority) => engine.analyse(req, priority).catch((e) => ({ error: String(e.message || e) })),
+  analyseStream: (req, priority, onInfo) => engine.analyse(req, priority, onInfo).catch((e) => ({ error: String(e.message || e) })),
+  cancel: async (tag) => { engine.cancelTag(tag); return true; },
+  restartEngine: async () => true,
+  engineInfo: async () => ({ exists: true, name: engine.name, path: 'tarayıcı' }),
 };
