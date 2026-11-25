@@ -117,6 +117,8 @@ window.api = {
     return null;
   },
   showFile: () => {},
+  // Storm / Rush / Streak results for the leaderboards
+  scoreRun: (kind, score) => { if (userId) supa.from('scores').insert({ student_id: userId, kind, score: Math.min(2000, score | 0) }).then(({ error }) => { if (error) console.error('Skor kaydedilemedi', error); }); },
   // Stockfish (WASM, ./engine.js)
   analyse: (req, priority) => window.__lichessGame ? Promise.resolve({ error: 'Lichess maçı sürerken motor kapalı' }) : engine.analyse(req, priority).catch((e) => ({ error: String(e.message || e) })),
   analyseStream: (req, priority, onInfo) => window.__lichessGame ? Promise.resolve({ error: 'Lichess maçı sürerken motor kapalı' }) : engine.analyse(req, priority, onInfo).catch((e) => ({ error: String(e.message || e) })),

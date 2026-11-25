@@ -4,6 +4,7 @@ import { supa, hesap, cleanUsername } from './supa.js';
 import { h, clear, modal, toast, fmtDate } from '../../src/renderer/core/dom.js';
 import { students, packageSummary } from '../../src/renderer/core/assign.js';
 import { videoStore } from './videos.js';
+import { rankingView } from './ranking.js';
 
 // Cached profile info of the academy's students (ders türü, grup, hocalar) for filters.
 export const meta = { students: {}, coaches: {}, me: null };
@@ -186,13 +187,9 @@ export function accountsHooks(me) {
 
     // ---------- "Sıralama" ----------
     async leaderboardTab(body) {
-      clear(body).append(h('div.empty', 'Yükleniyor…'));
-      let rows;
-      try { rows = await fetchLeaderboard(); } catch (e) { clear(body).append(h('div.empty', 'Sıralama alınamadı: ' + e.message)); return; }
-      const groups = [...new Set(rows.map((r) => r.group_name || 'Grupsuz'))].sort((a, b) => a.localeCompare(b, 'tr'));
-      clear(body).append(h('div.sets-page',
-        h('p.muted', 'Öğrenciler kendi gruplarının sıralamasını görür (adlar "Ahmet Y." şeklinde kısaltılır). Yalnızca velisi onay veren öğrenciler sıralamada yer alır: Hesaplar → "Sıralamada" sütunu.'),
-        h('div.lb-grid', groups.map((g) => leaderboardView(rows.filter((r) => (r.group_name || 'Grupsuz') === g), { title: g, limit: 50, compact: true })))));
+      const all = await myStudents().catch(() => []);
+      const groups = [...new Set(all.map((x) => x.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+      clear(body).append(h('div.sets-page', rankingView({ isCoach: true, groups })));
     },
 
     // ---------- "Antrenörler" (başantrenör) ----------
@@ -415,3 +412,6 @@ export function leaderboardView(rows, { title = 'Haftalık sıralama', limit = 1
   draw();
   return host;
 }
+
+export const academyStudents = () => myStudents();
+export const academyCoaches = () => myCoaches();

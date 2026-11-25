@@ -18,6 +18,8 @@ import gtm from '../../src/renderer/modules/gtm/index.js';
 import openings from '../../src/renderer/modules/openings/index.js';
 import play from '../../src/renderer/modules/play/index.js';
 import videos from './videos.js';
+import ranking, { homeRanking } from './ranking.js';
+import schedule, { homeNextLesson } from './schedule.js';
 import lichessPlay, { live } from './lichess-play.js';
 import { loadOpenings } from '../../src/renderer/core/openings.js';
 import { startLink, finishLink, getLink, unlink, lichessSummary, ensureRegistered, playToken, forgetPlay } from './lichess.js';
@@ -33,7 +35,7 @@ let mounted = null;
 let activeId = 'home';
 teacher.title = 'Antrenör';
 lichessPlay.short = 'Lichess'; gtm.short = 'Tahmin Et'; openings.short = 'Açılış'; play.short = 'Oyna'; puzzles.short = 'Bulmaca';
-const MODULES = [videos, puzzles, gtm, openings, play, lichessPlay, teacher];
+const MODULES = [schedule, videos, puzzles, gtm, openings, play, lichessPlay, ranking, teacher];
 const visibleModules = () => MODULES.filter((m) => !m.teacherOnly || (me && me.role === 'coach'));
 
 // ---------- login ----------
@@ -99,6 +101,7 @@ async function start() {
   const { data: prof } = await supa.from('profiles').select('*').eq('id', user.id).maybeSingle();
   if (!prof) { await supa.auth.signOut(); toast('Bu hesabın profili bulunamadı. Antrenörünüzle görüşün.', 'error'); return showLogin(); }
   me = prof;
+  window.__me = prof;
   try { await loadUserData(user.id); } catch (e) { clear(app).append(h('div.login-page', h('div.empty', 'Veriler yüklenemedi: ' + e.message))); return; }
   await store.load();
   if (!store.profile) store.profile = newProfile(me.display_name);
@@ -159,7 +162,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 // ---------- shell ----------
 function nav() {
   // On phones only the first few items fit in the bottom bar; the rest open from "Diğer".
-  const primary = new Set(me.role === 'coach' ? ['home', 'teacher', 'videos', 'puzzles'] : ['home', 'puzzles', 'videos', 'gtm']);
+  const primary = new Set(me.role === 'coach' ? ['home', 'teacher', 'program', 'videos'] : ['home', 'puzzles', 'program', 'siralama']);
   const item = (id, icon, title, short) => h('button.nav-item' + (activeId === id ? '.active' : '') + (primary.has(id) ? '' : '.nav-more-item'),
     { onclick: () => { side.classList.remove('more-open'); go(id); } }, h('span.nav-icon', icon), h('span.nav-label', title), h('span.nav-short', short || title));
   const moreActive = !primary.has(activeId);
@@ -239,7 +242,7 @@ async function renderHome(root) {
         return row;
       })));
     }).catch(() => {});
-    fetchLeaderboard().then((rows) => { if (rows.length > 1) lbHost.append(leaderboardView(rows, { title: `🏆 Sıralama${me.group_name ? ' · ' + me.group_name : ''}`, compact: true })); }).catch(() => {});
+    lbHost.append(homeRanking({ myGroup: me.group_name, go }));
   }
   getLink().then((l) => { if (!l && me.role === 'student') lichessHost.append(h('div.panel.lichess-cta', h('div', h('b', '♞ Lichess hesabını bağla'), h('div.muted.small', 'Antrenörün Lichess puanını ve oyunlarını görsün, kendi oyunlarından bulmaca çıkaralım.')),
     h('button.btn.primary', { onclick: () => startLink() }, 'Lichess ile bağlan'))); });
@@ -247,6 +250,7 @@ async function renderHome(root) {
     h('div.hero', h('div', h('h1', `Hoş geldin, ${me.display_name.split(' ')[0]}`), h('p.muted', me.role === 'coach' ? 'Öğrencilerin ve ödevler Antrenör bölümünde.' : 'Bugün ne çalışmak istersin?')),
       me.role === 'coach' ? h('div.hero-actions', h('button.btn.primary', { onclick: () => go('teacher') }, 'Öğrencilerim')) : null),
     annHost,
+    me.role === 'student' ? homeNextLesson(go) : null,
     localStorage.getItem('koroglu-kurulum-kapat') ? null : installCard({ onDismiss: () => localStorage.setItem('koroglu-kurulum-kapat', '1') }),
     me.role === 'student' ? today : null,
     asgHost, lbHost, lichessHost, badgeHost,

@@ -213,6 +213,7 @@ async function runSeq(body, mode, { setActive, back }) {
     board.setInteractive(false);
     const sum = R.summary();
     const rec = await rushStore.addRun(sum);
+    if (api.scoreRun && sum.score > 0) api.scoreRun(mode, sum.score);
     if (rec.record && sum.score > 0) toast(`Yeni rekor: ${sum.score}!`, 'ok');
     const title = cfg.kind === 'streak' ? `${sum.score} bulmacalık seri` : `${sum.score} bulmaca`;
     clear(body).append(h('div.storm-end',

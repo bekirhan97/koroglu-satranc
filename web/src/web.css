@@ -154,3 +154,47 @@ table.lb tr.me td { background: #fff3d6; font-weight: 700; }
 .filter-sel { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
 .chip.ozel { background: #efe3f7; color: #6a2c8c; }
 .coach-pick { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.lb-controls { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.lb-controls .seg { flex-wrap: wrap; }
+.lb-panel .panel-title { display: flex; align-items: center; gap: 8px; }
+.lb-empty { padding: 12px 0; }
+
+/* ---------- Program ---------- */
+.schedule .toolbar { flex-wrap: wrap; }
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.day-col { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; min-height: 120px; display: flex; flex-direction: column; gap: 6px; }
+.day-col.today { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(217,168,75,.25); }
+.day-head { font-size: 13px; color: var(--muted, #6b6258); padding: 2px 4px 4px; border-bottom: 1px solid var(--line); }
+.day-empty { text-align: center; padding: 8px 0; }
+.lesson { text-align: left; border: 0; border-left: 4px solid var(--accent); background: #faf6ef; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; font: inherit; }
+.lesson:hover { background: #f3ead9; }
+.lesson.ozel { border-left-color: #6a2c8c; }
+.lesson.tek { border-left-color: var(--gold); }
+.lesson.cancelled { opacity: .6; text-decoration: line-through; }
+.lesson-time { font-weight: 700; font-size: 13px; }
+.lesson-name { font-size: 14px; }
+.lesson-meta { font-size: 12px; color: #7a7066; }
+.lesson .chip { align-self: flex-start; font-size: 11px; }
+.att-list { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow: auto; }
+.att-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #f0ebe2; }
+.att-btns { display: flex; gap: 4px; }
+.att-btn { width: 36px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: #fff; font-weight: 700; cursor: pointer; }
+.att-btn.geldi.on { background: var(--good); color: #fff; border-color: var(--good); }
+.att-btn.gelmedi.on { background: var(--bad); color: #fff; border-color: var(--bad); }
+.att-btn.mazeretli.on { background: var(--gold); color: #fff; border-color: var(--gold); }
+.form-l { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.form-row select, .form-row input[type=time], .form-row input[type=date] { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.class-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.next-row { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0ebe2; flex-wrap: wrap; }
+.next-row.cancelled { opacity: .7; }
+.past-row { padding: 8px 0; border-bottom: 1px solid #f0ebe2; }
+.past-note { white-space: pre-wrap; font-size: 14px; color: #5b5249; margin-top: 4px; }
+.next-lesson { display: flex; align-items: center; gap: 12px; cursor: pointer; border-color: var(--accent); }
+.next-lesson.cancelled { border-color: var(--bad); background: #fbeaea; }
+.nl-icon { font-size: 28px; }
+@media (max-width: 860px) {
+  .week-grid { grid-template-columns: 1fr; }
+  .day-col { min-height: 0; }
+  .day-col:not(.today) .day-empty { display: none; }
+}

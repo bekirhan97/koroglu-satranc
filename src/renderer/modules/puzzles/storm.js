@@ -187,6 +187,7 @@ async function run(body, minutes, setActive) {
     board.setInteractive(false);
     const sum = runState.summary();
     const rec = await stormStore.addRun(sum);
+    if (window.api.scoreRun && sum.score > 0) window.api.scoreRun(`storm${minutes}`, sum.score);
     if (rec.record && sum.score > 0) toast(`Yeni rekor: ${sum.score}!`, 'ok');
     clear(body).append(h('div.storm-end',
       h('div.storm-hero', h('div.storm-bolt', rec.record && sum.score ? '🏆' : '⚡'), h('h2', `${sum.score} bulmaca`),

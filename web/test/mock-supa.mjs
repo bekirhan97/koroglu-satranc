@@ -4,11 +4,11 @@
 import crypto from 'node:crypto';
 
 export function createMock() {
-  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [], student_coaches: [] };
+  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [], student_coaches: [], classes: [], class_members: [], sessions: [], attendance: [], scores: [] };
   const users = new Map(); // email -> { id, password }
   const tokens = new Map(); // token -> user id
   const DOMAIN = 'kullanici.koroglu-satranc.app';
-  const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'] };
+  const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'], classes: ['id'], class_members: ['class_id', 'student_id'], sessions: ['id'], attendance: ['session_id', 'student_id'], scores: ['id'] };
 
   const prof = (id) => db.profiles.find((x) => x.id === id);
   const academyOf = (p) => (p ? (p.role === 'coach' && !p.coach_id ? p.id : p.coach_id) : null);
@@ -25,10 +25,13 @@ export function createMock() {
     let rows = db[table];
     for (const [k, v] of url.searchParams) {
       if (['select', 'order', 'limit', 'offset', 'on_conflict', 'columns'].includes(k)) continue;
-      const m = v.match(/^(eq|like)\.(.*)$/);
+      const m = v.match(/^(eq|like|gte|lte|lt|gt|in)\.(.*)$/);
       if (!m) continue;
       const val = decodeURIComponent(m[2]);
-      rows = rows.filter((r) => (m[1] === 'eq' ? String(r[k]) === val : new RegExp('^' + val.replace(/[.]/g, '\\.').replace(/%/g, '.*') + '$').test(String(r[k]))));
+      const op = m[1];
+      if (op === 'in') { const set = new Set(val.replace(/^\(|\)$/g, '').split(',').map((x) => x.replace(/^"|"$/g, ''))); rows = rows.filter((r) => set.has(String(r[k]))); continue; }
+      rows = rows.filter((r) => (op === 'eq' ? String(r[k]) === val : op === 'gte' ? String(r[k]) >= val : op === 'lte' ? String(r[k]) <= val : op === 'lt' ? String(r[k]) < val : op === 'gt' ? String(r[k]) > val
+        : new RegExp('^' + val.replace(/[.]/g, '\\.').replace(/%/g, '.*') + '$').test(String(r[k]))));
     }
     const order = url.searchParams.get('order');
     if (order) { const [col, dir] = order.split('.'); rows = rows.slice().sort((a, b) => (a[col] > b[col] ? 1 : -1) * (dir === 'desc' ? -1 : 1)); }
@@ -88,6 +91,20 @@ export function createMock() {
       if (uname) db.lichess_accounts.push({ user_id: uid, coach_id: academyOf(me), display_name: me.display_name, username: uname });
       return json(route, 204);
     }
+    if (p === '/rest/v1/rpc/class_sync' || p === '/rest/v1/rpc/class_release') {
+      const b = JSON.parse(req.postData() || '{}');
+      if (b.cid) { const c = db.classes.find((x) => x.id === b.cid); if (c && c.kind === 'grup') for (const m of db.class_members.filter((x) => x.class_id === c.id)) prof(m.student_id).group_name = c.name; }
+      return json(route, 204);
+    }
+    if (p === '/rest/v1/rpc/leaderboard2') {
+      const b = JSON.parse(req.postData() || '{}'); const uid = userFromReq(req); const me = prof(uid);
+      const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === academyOf(me) && (x.leaderboard_ok || x.id === uid) && (b.scope !== 'group' || x.group_name === (me.role === 'coach' ? b.grp : me.group_name)));
+      const rows = team.map((t) => { let v = 0;
+        if (b.kind === 'antrenman') { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; v = r ? (b.period === 'all' ? r.ratings.puzzles.r : r.activity.days.slice(-7).reduce((a, d) => a + (d.puzzles || 0) + (d.reviews || 0), 0)) : 0; }
+        else v = Math.max(0, ...db.scores.filter((x) => x.student_id === t.id && x.kind === b.kind).map((x) => x.score));
+        return { name: t.display_name.split(' ')[0] + ' ' + t.display_name.split(' ').pop()[0] + '.', is_me: t.id === uid, group_name: t.group_name, value: v }; }).filter((r) => r.value > 0 || r.is_me);
+      return json(route, 200, rows);
+    }
     if (p === '/rest/v1/rpc/set_leaderboard_ok') { const b = JSON.parse(req.postData() || '{}'); const st = db.profiles.find((x) => x.id === b.student); st.leaderboard_ok = b.ok; return json(route, 204); }
     if (p === '/rest/v1/rpc/leaderboard') {
       const uid = userFromReq(req); const me = db.profiles.find((x) => x.id === uid);
@@ -111,6 +128,11 @@ export function createMock() {
       if (table === 'assignments') rows = rows.filter((a) => a.coach_id === uid || (isCoach && academyOf(prof(a.coach_id)) === acad) || db.assignment_targets.some((t) => t.assignment_id === a.id && t.student_id === uid));
       if (table === 'videos') rows = rows.filter((v) => academyOf(prof(v.coach_id)) === acad);
       if (table === 'announcements') rows = rows.filter((a) => a.coach_id === uid || (meP && meP.role === 'student' && (a.coach_id === acad || db.student_coaches.some((x) => x.student_id === uid && x.coach_id === a.coach_id)) && (!a.group_name || a.group_name === meP.group_name)));
+      if (table === 'classes') { rows = rows.filter((c) => (isCoach && c.academy_id === acad) || db.class_members.some((m) => m.class_id === c.id && m.student_id === uid));
+        if ((url.searchParams.get('select') || '').includes('class_members')) rows = rows.map((c) => ({ ...c, class_members: db.class_members.filter((m) => m.class_id === c.id && (isCoach || m.student_id === uid)).map((m) => ({ student_id: m.student_id })) })); }
+      if (table === 'sessions') { rows = rows.filter((x) => (isCoach && x.academy_id === acad) || (x.class_id && db.class_members.some((m) => m.class_id === x.class_id && m.student_id === uid)) || (x.student_ids || []).includes(uid));
+        if ((url.searchParams.get('select') || '').includes('classes(')) rows = rows.map((x) => ({ ...x, classes: x.class_id ? { name: (db.classes.find((c) => c.id === x.class_id) || {}).name } : null })); }
+      if (table === 'attendance') rows = rows.filter((a) => a.student_id === uid || isCoach);
       if (table === 'assignments' && url.searchParams.get('select') && url.searchParams.get('select').includes('assignment_targets')) rows = rows.map((a) => ({ ...a, assignment_targets: db.assignment_targets.filter((t) => t.assignment_id === a.id).map((t) => ({ student_id: t.student_id })) }));
       if (table === 'lichess_accounts') rows = rows.filter((r) => r.user_id === uid || r.coach_id === acad);
       if (table === 'reports') rows = rows.filter((r) => r.student_id === uid || (isCoach && prof(r.student_id) && prof(r.student_id).coach_id === acad));
@@ -123,15 +145,18 @@ export function createMock() {
       const out = [];
       for (const row0 of body) {
         const row = { ...row0 };
+        if (['classes', 'sessions'].includes(table) && !row.id) { row.id = crypto.randomUUID(); row.created_at = new Date().toISOString(); }
+        if (table === 'scores') { row.id = db.scores.length + 1; row.created_at = new Date().toISOString(); }
         if (table === 'announcements') { row.id = crypto.randomUUID(); row.coach_id = uid; row.created_at = new Date().toISOString(); }
         if (table === 'videos') { row.id = row.id || crypto.randomUUID(); row.coach_id = row.coach_id || uid; row.created_at = new Date().toISOString(); }
         if (table === 'assignments') row.created_at = new Date().toISOString();
-        const keys = keyOf[table];
+        const keys = url.searchParams.get('on_conflict') ? url.searchParams.get('on_conflict').split(',') : keyOf[table];
         const i = db[table].findIndex((r) => keys.every((k) => r[k] === row[k]));
-        if (i >= 0) { if (prefer.includes('merge-duplicates')) db[table][i] = { ...db[table][i], ...row }; else return json(route, 409, { code: '23505', message: 'duplicate key' }); }
+        if (i >= 0) { if (prefer.includes('merge-duplicates')) { const keepId = db[table][i].id; db[table][i] = { ...db[table][i], ...row }; if (keepId) db[table][i].id = keepId; out.push(db[table][i]); continue; } else return json(route, 409, { code: '23505', message: 'duplicate key' }); }
         else db[table].push(row);
         out.push(row);
       }
+      if (single) return json(route, 201, out[0]);
       return json(route, 201, prefer.includes('return=representation') ? out : undefined);
     }
     if (method === 'PATCH') {
