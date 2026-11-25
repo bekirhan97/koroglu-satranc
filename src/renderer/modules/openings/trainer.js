@@ -4,6 +4,7 @@ import { h, clear } from '../../core/dom.js';
 import { Board, localSan } from '../../core/board.js';
 import { store } from '../../core/store.js';
 import { isUserMove, cardKey, grade, LEVEL_NAMES } from './data.js';
+import { activity } from '../../core/activity.js';
 
 const tr = () => store.settings.turkishNotation !== false;
 
@@ -158,6 +159,7 @@ export class LineTrainer {
   record(n, correct) {
     const key = cardKey(n);
     this.results.push({ key, correct });
+    activity.add('openings');
     if (this.mode !== 'practice') {
       // in learn mode a first test always starts the ladder at level 1
       if (this.mode === 'learn') { grade(this.srs, key, true); if (!correct) { this.srs[key].lv = 1; } }

@@ -2,10 +2,8 @@
 import { packTree, unpackTree, pathKey, countNodes } from '../../core/pgntree.js';
 
 const api = window.api;
-const H = 3600 * 1000, D = 24 * H;
-// level -> interval until the next review
-export const INTERVALS = [0, 4 * H, 1 * D, 3 * D, 7 * D, 14 * D, 30 * D, 90 * D, 180 * D];
-export const LEVEL_NAMES = ['Yeni', '4 saat', '1 gün', '3 gün', '1 hafta', '2 hafta', '1 ay', '3 ay', '6 ay'];
+import { INTERVALS, LEVEL_NAMES, gradeCard } from '../../core/srs.js';
+export { INTERVALS, LEVEL_NAMES };
 
 export const odata = {
   reps: [],               // [{ id, name, color, addedAt, lines, cards }]
@@ -104,15 +102,8 @@ export function pickLines(mode, rep, roots, srs, { limit = 10 } = {}) {
 }
 
 export function grade(srs, key, correct) {
-  const now = Date.now();
-  const s = srs[key] || { lv: 0, reps: 0, lapses: 0 };
-  s.reps++;
-  if (correct) s.lv = Math.min(INTERVALS.length - 1, s.lv + 1);
-  else { s.lv = 1; s.lapses++; }
-  s.due = now + INTERVALS[s.lv];
-  s.last = now;
-  srs[key] = s;
-  return s;
+  srs[key] = gradeCard(srs[key], correct);
+  return srs[key];
 }
 
 // Guess which side a repertoire is for: the repertoire side usually has fewer alternatives per position.

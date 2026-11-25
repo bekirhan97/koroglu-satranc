@@ -3,6 +3,8 @@ import { Chess } from 'chess.js';
 import { store } from '../../core/store.js';
 import { splitPgn } from '../../core/pgn.js';
 import { glickoUpdate, inflateRd } from '../../core/glicko.js';
+import { gradeCard } from '../../core/srs.js';
+import { activity } from '../../core/activity.js';
 
 const api = window.api;
 const PUZZLE_RD = 80;
@@ -13,8 +15,13 @@ export const pdata = {
   sets: [],          // [{id, name, addedAt, puzzles:[{id, fen, moves, title}]}]
   progress: {},      // { setId: { puzzleId: 'ok' | 'fail' } }
   seen: new Set(),
+  review: {},        // { key: { p: puzzle, lv, due, reps, lapses, last, added } } – missed puzzles to repeat
+  graduated: 0,      // missed puzzles later solved at the 2-week level
   async load() {
     this.history = await api.read('puzzles/history', []);
+    const rv = await api.read('puzzles/review', {});
+    this.review = rv.cards || {};
+    this.graduated = rv.graduated || 0;
     this.sets = await api.read('puzzles/sets', []);
     this.progress = await api.read('puzzles/progress', {});
     this.seen = new Set(this.history.filter((x) => x.src === 'lichess').map((x) => x.id));
@@ -26,6 +33,7 @@ export const pdata = {
   saveHistory() { return api.write('puzzles/history', this.history); },
   saveSets() { return api.write('puzzles/sets', this.sets); },
   saveProgress() { return api.write('puzzles/progress', this.progress); },
+  saveReview() { return api.write('puzzles/review', { cards: this.review, graduated: this.graduated }); },
 };
 
 // Unified puzzle object. firstAuto: moves[0] is the opponent's move that sets up the puzzle (Lichess format).
@@ -77,7 +85,73 @@ export function recordResult(puzzle, { ok, ms, rated }) {
   pdata.history.push({ id: puzzle.id, src: puzzle.src, t: Date.now(), ok, r: puzzle.rating || null, d: Math.round(delta * 10) / 10, ms, rated: !!rated, themes: puzzle.themes || [] });
   if (puzzle.src === 'lichess') pdata.seen.add(puzzle.id);
   pdata.saveHistory();
+  activity.add('puzzles');
+  if (!ok) addToReview(puzzle);
   return delta;
+}
+
+// ---------- missed puzzles: spaced repetition (unrated) ----------
+// A missed puzzle comes back after 4 hours, then 1 day, 3 days, 1 week, 2 weeks. Solving it correctly
+// at the 2-week level "graduates" it. A mistake sends it back to 4 hours. Ratings never change here.
+export const GRADUATE_LEVEL = 5;
+const reviewKey = (p) => (p.src === 'lichess' ? p.id : `set:${p.id}`);
+
+export function addToReview(puzzle, now = Date.now()) {
+  const key = reviewKey(puzzle);
+  const keep = ({ id, src, fen, moves, rating, themes, firstAuto, title }) => ({ id, src, fen, moves, rating, themes, firstAuto, title });
+  const c = pdata.review[key];
+  if (c) { gradeCard(c, false, now); c.p = keep(puzzle); }
+  else pdata.review[key] = { ...gradeCard(null, false, now), lapses: 0, reps: 0, p: keep(puzzle), added: now };
+  pdata.saveReview();
+}
+
+export function dueReviews(now = Date.now()) {
+  return Object.entries(pdata.review).filter(([, c]) => c.due <= now).sort((a, b) => a[1].due - b[1].due).map(([key, c]) => ({ key, ...c }));
+}
+
+export function nextReviewAt() {
+  const ds = Object.values(pdata.review).map((c) => c.due);
+  return ds.length ? Math.min(...ds) : null;
+}
+
+export function gradeReview(key, correct, now = Date.now()) {
+  const c = pdata.review[key];
+  if (!c) return null;
+  const wasLv = c.lv;
+  gradeCard(c, correct, now);
+  let graduated = false;
+  if (correct && wasLv >= GRADUATE_LEVEL) { delete pdata.review[key]; pdata.graduated++; graduated = true; }
+  pdata.saveReview();
+  activity.add('reviews');
+  return { ...c, graduated };
+}
+
+// ---------- theme analysis ----------
+// Per theme: performance rating over rated puzzles (avg puzzle rating + 400·(wins − losses)/n,
+// clamped), compared with the student's puzzle rating. Needs MIN_N puzzles for a verdict.
+export const MIN_N = 5;
+export const IGNORE_THEMES = new Set(['short', 'long', 'veryLong', 'oneMove', 'master', 'masterVsMaster', 'superGM', 'crushing', 'advantage', 'equality', 'mate', 'middlegame', 'opening', 'endgame']);
+
+export function themeAnalysis(history, rating, { minN = MIN_N, since = 0 } = {}) {
+  const per = {};
+  let all = { n: 0, ok: 0, rsum: 0 };
+  for (const x of history) {
+    if (!x.rated || !x.r || x.t < since) continue;
+    all.n++; all.ok += x.ok ? 1 : 0; all.rsum += x.r;
+    for (const t of x.themes || []) {
+      if (IGNORE_THEMES.has(t)) continue;
+      const p = (per[t] = per[t] || { n: 0, ok: 0, rsum: 0 });
+      p.n++; p.ok += x.ok ? 1 : 0; p.rsum += x.r;
+    }
+  }
+  const perf = (p) => p.rsum / p.n + Math.max(-400, Math.min(400, (400 * (2 * p.ok - p.n)) / p.n));
+  const rows = Object.entries(per).map(([theme, p]) => {
+    const pr = perf(p);
+    const diff = pr - rating;
+    const verdict = p.n < minN ? 'az' : diff <= -150 ? 'zayif' : diff >= 150 ? 'guclu' : 'normal';
+    return { theme, n: p.n, ok: p.ok, rate: p.ok / p.n, avgRating: p.rsum / p.n, perf: pr, diff, verdict };
+  }).sort((a, b) => (a.verdict === 'az') - (b.verdict === 'az') || a.diff - b.diff);
+  return { rows, total: all.n, weakest: rows.filter((r) => r.verdict === 'zayif').slice(0, 3).map((r) => r.theme) };
 }
 
 // ---------- PGN puzzle sets ----------

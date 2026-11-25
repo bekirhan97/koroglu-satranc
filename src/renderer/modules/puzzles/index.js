@@ -3,7 +3,8 @@
 import { h, clear, modal, toast, fmtDate, fmtTime } from '../../core/dom.js';
 import { store } from '../../core/store.js';
 import { ratingChart, barChart } from '../../core/charts.js';
-import { pdata, pickPuzzle, themeCounts, parsePuzzlePgn, recordResult } from './data.js';
+import { pdata, pickPuzzle, themeCounts, parsePuzzlePgn, recordResult, dueReviews, nextReviewAt, gradeReview, themeAnalysis, MIN_N, GRADUATE_LEVEL } from './data.js';
+import { LEVEL_NAMES } from '../../core/srs.js';
 import { PuzzleSolver } from './solver.js';
 import { THEME_GROUPS, themeName } from './themes.js';
 
@@ -15,7 +16,7 @@ export default {
   icon: '🧩',
   description: 'Lichess veritabanından 60.000 puanlı bulmaca ve kendi PGN bulmaca setleriniz. Temalara göre çalışın, bulmaca puanınızı takip edin.',
   ready: true,
-  homeInfo: () => `Bulmaca puanı: ${store.profile.ratings.puzzles.r.toFixed(0)} · ${pdata.history.length} çözüldü`,
+  homeInfo: () => { const d = dueReviews().length; return `Bulmaca puanı: ${store.profile.ratings.puzzles.r.toFixed(0)} · ${pdata.history.length} çözüldü` + (d ? ` · ${d} tekrar bekliyor` : ''); },
 
   mount(root) {
     let current = null;
@@ -25,8 +26,9 @@ export default {
     clear(root).append(h('div.module', h('div.module-head', h('h2', this.title), tabsHost), body));
     const swap = (v) => { if (current && current.destroy) current.destroy(); current = v; };
     const setTabs = (active) => clear(tabsHost).append(...[
-      ['train', 'Antrenman', showTrain], ['themes', 'Temalar', showThemes], ['sets', 'Setlerim', showSets], ['stats', 'İstatistikler', showStats],
-    ].map(([k, l, f]) => h('button.tab' + (active === k ? '.active' : ''), { onclick: f }, l)),
+      ['train', 'Antrenman', showTrain], ['review', 'Tekrar', showReview], ['themes', 'Temalar', showThemes], ['sets', 'Setlerim', showSets], ['stats', 'İstatistikler', showStats],
+    ].map(([k, l, f]) => h('button.tab' + (active === k ? '.active' : ''), { onclick: f }, l,
+      k === 'review' && dueReviews().length ? h('span.count', dueReviews().length) : null)),
     pill);
     const pill = h('span.rating-pill');
     const refreshPill = () => { pill.textContent = `Bulmaca puanı: ${store.profile.ratings.puzzles.r.toFixed(0)}`; };
@@ -44,11 +46,17 @@ export default {
     function next() {
       setTabs('train');
       const target = store.profile.ratings.puzzles.r + state.offset;
-      const p = pickPuzzle({ target, theme: state.theme });
+      let weak = null;
+      if (state.theme === '__weak') {
+        weak = themeAnalysis(pdata.history, store.profile.ratings.puzzles.r).weakest;
+        if (!weak.length) { toast(`Henüz zayıf tema bulunamadı. Her temada en az ${MIN_N} bulmaca çözünce belirlenir.`); state.theme = ''; weak = null; }
+      }
+      const p = weak ? pickPuzzle({ target, themes: weak }) : pickPuzzle({ target, theme: state.theme });
       const bar = h('div.pz-bar',
         h('span.muted', 'Tema:'),
         h('select', { onchange: (e) => { state.theme = e.target.value; next(); } },
           h('option', { value: '' }, 'Karışık'),
+          h('option', { value: '__weak', selected: state.theme === '__weak' }, '★ Zayıf temalarım'),
           THEME_GROUPS.map(([g, ts]) => h('optgroup', { label: g }, ts.map((t) => h('option', { value: t, selected: state.theme === t }, themeName(t)))))),
         h('span.muted', 'Zorluk:'),
         h('div.seg', OFFSETS.map(([v, l]) => h('button' + (state.offset === v ? '.active' : ''), { onclick: () => { state.offset = v; next(); } }, l))));
@@ -59,17 +67,58 @@ export default {
       swap(v); v.mount();
     }
 
+    // ---------- missed puzzles (spaced repetition, unrated) ----------
+    function showReview() {
+      setTabs('review'); swap(null);
+      const due = dueReviews();
+      const total = Object.keys(pdata.review).length;
+      if (!due.length) {
+        const nx = nextReviewAt();
+        clear(body).append(h('div.empty',
+          h('div.big-icon', '🔁'),
+          h('h3', total ? 'Şu an tekrar edilecek bulmaca yok' : 'Tekrar listesi boş'),
+          h('p', 'Çözemediğiniz (ya da ipucu/çözüm gördüğünüz) bulmacalar buraya gelir ve aralıklı tekrarla yeniden sorulur: 4 saat → 1 gün → 3 gün → 1 hafta → 2 hafta. 2 hafta sonra da doğru çözerseniz öğrenilmiş sayılır.'),
+          h('p.muted', 'Tekrarlar puanınızı değiştirmez.'),
+          total ? h('p', `Listede ${total} bulmaca var. Sıradaki tekrar: ${fmtDate(nx)} ${new Date(nx).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`) : null,
+          pdata.graduated ? h('p.ok-text', `✓ ${pdata.graduated} bulmaca öğrenildi`) : null));
+        return;
+      }
+      const item = due[0];
+      const host = h('div.pz-host');
+      clear(body).append(host);
+      const header = h('div.pz-bar', h('b', 'Tekrar'), h('span.muted', `${due.length} bulmaca bekliyor`),
+        h('span.chip', `Seviye: ${LEVEL_NAMES[item.lv] || item.lv}`), h('span.muted', `${item.lapses} kez kaçırıldı`), h('span.spacer'),
+        h('span.muted.small', 'Puanı etkilemez'));
+      const v = new PuzzleSolver(host, item.p, {
+        rated: false, header,
+        onFinish: ({ ok }) => {
+          const r = gradeReview(item.key, ok);
+          if (r && r.graduated) toast('Bu bulmacayı öğrendiniz! Tekrar listesinden çıkarıldı.', 'ok');
+          else if (r) toast(ok ? `Doğru. Sonraki tekrar: ${LEVEL_NAMES[r.lv]} sonra` : 'Yanlış. 4 saat sonra yeniden sorulacak.', ok ? 'ok' : '');
+          return 0;
+        },
+        onNext: showReview,
+        nextLabel: due.length > 1 ? 'Sonraki tekrar ▸' : 'Bitir',
+      });
+      swap(v); v.mount();
+    }
+
     // ---------- themes ----------
     async function showThemes() {
       setTabs('themes'); swap(null);
       if (!pdata.db) { loading('Bulmacalar yükleniyor…'); await pdata.loadDb(); }
       const counts = themeCounts();
       const perf = themePerf();
-      clear(body).append(h('div.theme-page', THEME_GROUPS.map(([g, ts]) => h('div',
+      const ta = themeAnalysis(pdata.history, store.profile.ratings.puzzles.r);
+      const verdict = Object.fromEntries(ta.rows.map((r) => [r.theme, r.verdict]));
+      clear(body).append(h('div.theme-page',
+        ta.weakest.length ? h('div.panel.weak-banner', h('div', h('b', 'Zayıf temalarınız: '), ta.weakest.map(themeName).join(', ')),
+          h('button.btn.primary.small', { onclick: () => { state.theme = '__weak'; showTrain(); } }, 'Zayıf temalarımı çalış ▸')) : null,
+        THEME_GROUPS.map(([g, ts]) => h('div',
         h('h3.group-title', g),
         h('div.theme-grid', ts.filter((t) => counts[t]).map((t) => {
           const pf = perf[t];
-          return h('button.theme-card', { onclick: () => { state.theme = t; showTrain(); } },
+          return h('button.theme-card' + (verdict[t] && verdict[t] !== 'az' && verdict[t] !== 'normal' ? '.' + verdict[t] : ''), { onclick: () => { state.theme = t; showTrain(); } },
             h('div.tc-name', themeName(t)),
             h('div.tc-sub', `${counts[t].toLocaleString('tr-TR')} bulmaca`),
             pf ? h('div.tc-perf', `%${Math.round((100 * pf.ok) / pf.n)} başarı (${pf.n})`) : null);
@@ -140,8 +189,25 @@ export default {
       let streak = 0, best = 0;
       for (const x of hist) { streak = x.ok ? streak + 1 : 0; best = Math.max(best, streak); }
       const perf = themePerf();
-      const themeRows = Object.entries(perf).filter(([, v]) => v.n >= 3)
-        .map(([t, v]) => ({ label: themeName(t), value: (100 * v.ok) / v.n, n: v.n })).sort((a, b) => a.value - b.value).slice(0, 10);
+      const themePanel = () => {
+        const ta = themeAnalysis(hist, pr.r);
+        const rows = ta.rows.filter((r) => r.verdict !== 'az');
+        const few = ta.rows.filter((r) => r.verdict === 'az').length;
+        const label = { zayif: 'Zayıf', normal: 'Normal', guclu: 'Güçlü' };
+        return h('div.panel.theme-analysis', h('div.panel-title', 'Tema analizi'),
+          h('p.muted.small', `Her temadaki performansınız (çözdüğünüz bulmacaların zorluğu ve sonucuna göre) bulmaca puanınızla (${pr.r.toFixed(0)}) karşılaştırılır. En az ${MIN_N} puanlı bulmaca gerekir.`),
+          rows.length ? h('table.ta', h('tbody', rows.map((r) => h('tr.' + r.verdict,
+            h('td', themeName(r.theme)),
+            h('td.num', `${r.ok}/${r.n}`),
+            h('td.bar', h('span.ta-track', h('span.ta-zero'), h('span.ta-fill', { style: r.diff < 0
+              ? { right: '50%', width: `${Math.min(50, (-r.diff / 400) * 50)}%` }
+              : { left: '50%', width: `${Math.min(50, (r.diff / 400) * 50)}%` } }))),
+            h('td.num', (r.diff >= 0 ? '+' : '') + Math.round(r.diff)),
+            h('td', h('span.verdict', label[r.verdict])),
+            h('td', h('button.btn.small.ghost', { onclick: () => { state.theme = r.theme; showTrain(); } }, 'Çalış')))))) : h('div.muted', 'Henüz yeterli veri yok. Karışık bulmaca çözdükçe analiz oluşur.'),
+          few ? h('div.muted.small', `${few} temada henüz yeterli bulmaca yok.`) : null,
+          ta.weakest.length ? h('button.btn.primary.small', { style: { marginTop: '8px' }, onclick: () => { state.theme = '__weak'; showTrain(); } }, 'Zayıf temalarımı çalış ▸') : null);
+      };
       const avgMs = hist.length ? hist.reduce((a, x) => a + (x.ms || 0), 0) / hist.length : 0;
       clear(body).append(h('div.stats-page',
         h('div.cards',
@@ -151,7 +217,7 @@ export default {
           h('div.card', h('div.card-k', 'Seri'), h('div.card-v', streak), h('div.muted', `en iyi seri ${best}`))),
         h('div.panel', h('div.panel-title', 'Puan grafiği'), ratingChart(pr.history)),
         h('div.two-col',
-          h('div.panel', h('div.panel-title', 'En zayıf temalar (en az 3 bulmaca)'), themeRows.length ? barChart(themeRows, { max: 100, fmt: (v) => '%' + v.toFixed(0) }) : h('div.muted', 'Henüz yeterli veri yok.')),
+          themePanel(),
           h('div.panel', h('div.panel-title', 'Son bulmacalar'),
             hist.length ? h('table.kv.recent', hist.slice(-12).reverse().map((x) => h('tr',
               h('td', fmtDate(x.t)), h('td', x.src === 'lichess' ? `#${x.id}` : 'Set'), h('td', x.r || '–'),

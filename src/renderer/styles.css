@@ -331,3 +331,21 @@ table.kv.backups td:last-child { text-align: right; }
 .update-banner .icon-btn { color: #fff; }
 .set-row .btn { white-space: nowrap; }
 .set-row .btn-row { flex-wrap: nowrap; display: flex; gap: 6px; }
+
+/* ---------- 0.3: puzzle review + theme analysis ---------- */
+.tab .count { margin-left: 6px; background: var(--accent); color: #fff; font-size: 11px; padding: 1px 7px; border-radius: 10px; font-weight: 600; }
+.theme-card.zayif { border-color: #e2b4ad; background: #fbefed; }
+.theme-card.guclu { border-color: #b9d8c2; background: #eef7f0; }
+.weak-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-color: #e2b4ad; background: #fbefed; }
+table.ta { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.ta td { padding: 5px 6px; border-bottom: 1px solid #f0ebe2; }
+table.ta td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+table.ta td.bar { width: 34%; }
+.ta-track { position: relative; display: block; height: 10px; background: #f1ece3; border-radius: 5px; }
+.ta-zero { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: #bcb3a4; }
+.ta-fill { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: var(--muted); }
+tr.zayif .ta-fill { background: var(--bad); }
+tr.guclu .ta-fill { background: var(--good); }
+.verdict { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #eee8dd; }
+tr.zayif .verdict { background: #f6d9d5; color: var(--bad); }
+tr.guclu .verdict { background: #d9efdf; color: var(--good); }
