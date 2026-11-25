@@ -12,14 +12,16 @@ export const DURATIONS = [3, 5];
 export const WRONG_PENALTY = 10000;
 // combo → bonus seconds when the combo reaches that length (as on Lichess)
 export const COMBO_BONUS = [[5, 3], [12, 5], [20, 7], [30, 10]];
-const START_RATING = 700, STEP = 45, MAX_RATING = 2700;
+// Difficulty climbs fast at first, then ever more slowly (same curve as Rush/Streak).
+const START_RATING = 700, GAIN = 520, MAX_RATING = 2700;
+export const stormTarget = (i) => Math.min(MAX_RATING, Math.round(START_RATING + GAIN * Math.log(1 + i / 5)));
 
 // Ramp of puzzles from easy to hard. Pure apart from the random source.
 export function stormPuzzles(db, count = 140, random = Math.random) {
   const seen = new Set();
   const out = [];
   for (let i = 0; i < count; i++) {
-    const p = pickFrom(db, { target: Math.min(MAX_RATING, START_RATING + i * STEP), seen, random });
+    const p = pickFrom(db, { target: stormTarget(i), seen, random });
     if (!p) break;
     seen.add(p.id);
     out.push(p);
