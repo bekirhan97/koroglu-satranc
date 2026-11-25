@@ -1,0 +1,29 @@
+KÖROĞLU SATRANÇ – Mac Kurulumu
+==============================
+
+Doğru dosyayı seçin:
+- Apple Silicon (M1, M2, M3, M4 işlemcili Mac'ler): "Mac-AppleSilicon" zip'i
+- Eski Intel işlemcili Mac'ler: "Mac-Intel" zip'i
+  (Hangisi olduğunu görmek için:  > Bu Mac Hakkında > "Çip" ya da "İşlemci")
+
+1. Zip dosyasına çift tıklayın. "Koroglu Satranc.app" çıkacaktır.
+2. "Koroglu Satranc.app" dosyasını "Uygulamalar" (Applications) klasörüne sürükleyin.
+3. Uygulama henüz Apple tarafından imzalı olmadığı için ilk açılıştan ÖNCE bir kez
+   Terminal'de (Uygulamalar > İzlenceler > Terminal) şu komutu çalıştırın:
+
+   xattr -cr "/Applications/Koroglu Satranc.app"
+
+4. Ardından uygulamayı normal şekilde açın. macOS yine uyarı verirse:
+   Sistem Ayarları > Gizlilik ve Güvenlik > aşağıda "Yine de Aç" düğmesine tıklayın.
+
+Kullanım
+- İlk açılışta adınızı yazın.
+- Hamleyi Tahmin Et: size verilen usta oyunlarının PGN dosyalarını "PGN İçe Aktar" ile ekleyin.
+- Bulmacalar: 60.000 hazır bulmaca + kendi PGN bulmaca setleriniz (her oyunda [FEN] etiketi).
+- Açılış Tekrarı: repertuvarınızı varyantlı PGN olarak içe aktarın; öğrenip aralıklı tekrar edin.
+- Pozisyondan Oyna: herhangi bir pozisyonu Maia (1100–1900) ya da Stockfish'e karşı oynayın.
+
+Verileriniz bu Mac'te saklanır: Ayarlar > Veriler > "Klasörü aç".
+
+Lisans: Uygulama Stockfish (GPL-3) ve chessground (GPL-3) içerir. Lisans metinleri
+uygulama paketinin içinde Contents/Resources/licenses klasöründedir.
