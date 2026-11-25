@@ -4,7 +4,7 @@
 import crypto from 'node:crypto';
 
 export function createMock() {
-  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [] };
+  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [] };
   const users = new Map(); // email -> { id, password }
   const tokens = new Map(); // token -> user id
   const DOMAIN = 'kullanici.koroglu-satranc.app';
@@ -75,6 +75,14 @@ export function createMock() {
       if (b.action === 'ogrenci_sil') { db.profiles = db.profiles.filter((x) => x.id !== b.id); db.reports = db.reports.filter((x) => x.student_id !== b.id); return json(route, 200, { ok: true }); }
       return json(route, 400, { error: 'Bilinmeyen işlem' });
     }
+    // ---- RPC ----
+    if (p === '/rest/v1/rpc/set_lichess_username') {
+      const uid = userFromReq(req); const me = db.profiles.find((x) => x.id === uid);
+      const { uname } = JSON.parse(req.postData() || '{}');
+      db.lichess_accounts = db.lichess_accounts.filter((x) => x.user_id !== uid);
+      if (uname) db.lichess_accounts.push({ user_id: uid, coach_id: me.role === 'coach' ? me.id : me.coach_id, display_name: me.display_name, username: uname });
+      return json(route, 204);
+    }
     // ---- PostgREST ----
     const m = p.match(/^\/rest\/v1\/(\w+)$/);
     if (!m || !db[m[1]]) return json(route, 404, { message: 'not found' });
@@ -88,6 +96,7 @@ export function createMock() {
       if (table === 'profiles') { const me = db.profiles.find((x) => x.id === uid); rows = rows.filter((r) => r.id === uid || r.coach_id === uid || (me && r.id === me.coach_id)); }
       if (table === 'assignments') rows = rows.filter((a) => a.coach_id === uid || db.assignment_targets.some((t) => t.assignment_id === a.id && t.student_id === uid));
       if (table === 'videos') { const me = db.profiles.find((x) => x.id === uid); rows = rows.filter((v) => v.coach_id === uid || (me && v.coach_id === me.coach_id)); }
+      if (table === 'lichess_accounts') { const me = db.profiles.find((x) => x.id === uid); const team = me && (me.role === 'coach' ? me.id : me.coach_id); rows = rows.filter((r) => r.user_id === uid || r.coach_id === team); }
       if (table === 'reports') rows = rows.filter((r) => r.student_id === uid || db.profiles.some((x) => x.id === r.student_id && x.coach_id === uid));
       if (single) return rows.length ? json(route, 200, rows[0]) : json(route, 406, { code: 'PGRST116', message: 'no rows' });
       return json(route, 200, rows, { 'content-range': `0-${rows.length}/${rows.length}` });

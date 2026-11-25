@@ -56,6 +56,8 @@ export class Board {
   }
 
   setOrientation(o) { this.cg.set({ orientation: o }); }
+  // Recompute square positions after the layout around the board changed.
+  refresh() { this.cg.redrawAll(); }
   flip() { this.cg.toggleOrientation(); }
   setArrows(shapes) { this.cg.setAutoShapes(shapes || []); }
 

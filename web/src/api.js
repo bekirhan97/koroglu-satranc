@@ -118,8 +118,8 @@ window.api = {
   },
   showFile: () => {},
   // Stockfish (WASM, ./engine.js)
-  analyse: (req, priority) => engine.analyse(req, priority).catch((e) => ({ error: String(e.message || e) })),
-  analyseStream: (req, priority, onInfo) => engine.analyse(req, priority, onInfo).catch((e) => ({ error: String(e.message || e) })),
+  analyse: (req, priority) => window.__lichessGame ? Promise.resolve({ error: 'Lichess maçı sürerken motor kapalı' }) : engine.analyse(req, priority).catch((e) => ({ error: String(e.message || e) })),
+  analyseStream: (req, priority, onInfo) => window.__lichessGame ? Promise.resolve({ error: 'Lichess maçı sürerken motor kapalı' }) : engine.analyse(req, priority, onInfo).catch((e) => ({ error: String(e.message || e) })),
   cancel: async (tag) => { engine.cancelTag(tag); return true; },
   restartEngine: async () => true,
   engineInfo: async () => ({ exists: true, name: engine.name, path: 'tarayıcı' }),

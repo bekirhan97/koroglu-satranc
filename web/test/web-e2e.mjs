@@ -10,6 +10,7 @@ const URL = process.env.URL || 'http://localhost:8765/';
 const OUT = 'scratch/web-shots';
 fs.mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch();
+const LICHESS_LOG = [];
 const errors = [];
 async function newPage(viewport = { width: 1280, height: 820 }) {
   const ctx = await browser.newContext({ viewport });
@@ -19,6 +20,14 @@ async function newPage(viewport = { width: 1280, height: 820 }) {
     const u = new globalThis.URL(route.request().url());
     const j = (b) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(b) });
     if (u.pathname === '/api/token') return route.request().method() === 'DELETE' ? route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } }) : j({ access_token: 'lio_test', token_type: 'Bearer' });
+    const nd = (objs) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', headers: { 'access-control-allow-origin': '*' }, body: objs.map((o) => JSON.stringify(o)).join('\n') + '\n' });
+    if (u.pathname === '/api/stream/event') return nd([{ type: 'challenge', challenge: { id: 'C1', challenger: { id: 'rakip1', name: 'Rakip1', rating: 1400 }, destUser: { id: 'koroglukid', name: 'KorogluKid' }, rated: false, timeControl: { type: 'clock', limit: 300, increment: 3 } } }]);
+    if (u.pathname === '/api/account/playing') return j({ nowPlaying: [] });
+    if (u.pathname === '/api/challenge/C1/accept') return j({ ok: true });
+    if (u.pathname.startsWith('/api/challenge/')) { LICHESS_LOG.push(u.pathname + ' ' + route.request().postData()); return j({ id: 'C2', destUser: { name: u.pathname.split('/').pop() }, timeControl: { type: 'clock', limit: 600, increment: 0 } }); }
+    if (u.pathname === '/api/board/game/stream/G1') return nd([{ type: 'gameFull', id: 'G1', white: { id: 'koroglukid', name: 'KorogluKid', rating: 1342 }, black: { id: 'rakip1', name: 'Rakip1', rating: 1400 }, initialFen: 'startpos',
+      state: { type: 'gameState', moves: 'e2e4 e7e5', wtime: 300000, btime: 298000, winc: 3000, binc: 3000, status: 'started' } }]);
+    if (u.pathname.startsWith('/api/board/game/G1/')) { LICHESS_LOG.push(u.pathname); return j({ ok: true }); }
     if (u.pathname === '/api/account' || u.pathname.startsWith('/api/user/')) return j({ username: 'KorogluKid', perfs: { blitz: { rating: 1342, games: 210, prov: false }, rapid: { rating: 1418, games: 64 }, puzzle: { rating: 1650, games: 900 } } });
     return route.fulfill({ status: 404, body: '' });
   });
@@ -169,6 +178,26 @@ console.log('  url temizlendi:', !s.url().includes('code='));
 await nav(s, 'Ayarlar'); await s.waitForTimeout(1000);
 console.log('  ayarlarda:', await s.locator('.set-row:has-text("Lichess") b').textContent().catch(() => 'yok'));
 await shot(s, '09h-ayarlar-lichess');
+
+step("Lichess'te Oyna (sahte Lichess)");
+MOCK.db.lichess_accounts.push({ user_id: MOCK.db.profiles[0].id, coach_id: MOCK.db.profiles[0].id, display_name: 'Test Antrenör', username: 'HocaBekir' });
+await s.evaluate(() => localStorage.setItem('koroglu-lichess-oyun', JSON.stringify({ token: 't', username: 'KorogluKid', id: 'koroglukid', expires: Date.now() + 86400e3 })));
+await nav(s, 'Lichess'); await s.waitForTimeout(2500);
+await shot(s, '09i-lichess-lobi-telefon');
+console.log('  gelen davet:', await s.locator('.challenge-panel .challenge-row').count(), '· arkadaş listesi:', await s.locator('.friend-list .challenge-row').count());
+await s.click('.friend-list button:has-text("Davet et")'); await s.waitForTimeout(800);
+await s.click('.challenge-panel button:has-text("Kabul et")'); await s.waitForTimeout(500);
+await s.evaluate(() => window.goTo('lichess:G1')); await s.waitForTimeout(1000);
+await play(s, 'g1f3', true); await s.waitForTimeout(500);
+await shot(s, '09j-lichess-oyun-telefon');
+await nav(s, 'Bulmaca').catch(() => {}); await s.waitForTimeout(800);
+console.log('  maç sırasında başka bölüme geçiş engellendi:', await s.locator('.lp-status').count() > 0);
+console.log('  motor kapalı:', JSON.stringify(await s.evaluate(() => window.api.analyse({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', depth: 5 }))));
+console.log('  Lichess istekleri:', LICHESS_LOG.join(' | '));
+await s.click('.lp-layout button:has-text("Teslim ol")'); await s.waitForTimeout(400);
+await s.click('.modal button:has-text("Teslim ol")'); await s.waitForTimeout(400);
+console.log('  Lichess istekleri (son):', LICHESS_LOG.slice(-1).join(''));
+await s.click('.lp-leave'); await s.waitForTimeout(800);
 
 step('motora karşı oyun (telefon)');
 await nav(s, 'Oyna').catch(() => {}); await s.waitForTimeout(1500);

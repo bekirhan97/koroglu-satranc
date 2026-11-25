@@ -18,8 +18,9 @@ import gtm from '../../src/renderer/modules/gtm/index.js';
 import openings from '../../src/renderer/modules/openings/index.js';
 import play from '../../src/renderer/modules/play/index.js';
 import videos from './videos.js';
+import lichessPlay, { live } from './lichess-play.js';
 import { loadOpenings } from '../../src/renderer/core/openings.js';
-import { startLink, finishLink, getLink, unlink, lichessSummary } from './lichess.js';
+import { startLink, finishLink, getLink, unlink, lichessSummary, ensureRegistered, playToken, forgetPlay } from './lichess.js';
 import teacher from '../../src/renderer/modules/teacher/index.js';
 import { mountExam } from '../../src/renderer/modules/exam/index.js';
 import { accountsHooks, syncReports } from './coach.js';
@@ -30,8 +31,8 @@ let me = null;          // profiles row of the signed-in user
 let mounted = null;
 let activeId = 'home';
 teacher.title = 'Antrenör';
-gtm.short = 'Tahmin Et'; openings.short = 'Açılış'; play.short = 'Oyna'; puzzles.short = 'Bulmaca';
-const MODULES = [videos, puzzles, gtm, openings, play, teacher];
+lichessPlay.short = 'Lichess'; gtm.short = 'Tahmin Et'; openings.short = 'Açılış'; play.short = 'Oyna'; puzzles.short = 'Bulmaca';
+const MODULES = [videos, puzzles, gtm, openings, play, lichessPlay, teacher];
 const visibleModules = () => MODULES.filter((m) => !m.teacherOnly || (me && me.role === 'coach'));
 
 // ---------- login ----------
@@ -110,10 +111,12 @@ async function start() {
   loadOpenings().catch(() => {});
   const lr = await finishLink();
   if (lr && lr.error) toast(lr.error, 'error');
-  if (lr && lr.username) toast(`Lichess hesabınız bağlandı: @${lr.username}`, 'ok');
+  if (lr && lr.username) toast(lr.play ? `Lichess oyun izni verildi: @${lr.username}` : `Lichess hesabınız bağlandı: @${lr.username}`, 'ok');
+  ensureRegistered().catch(() => {});
+  if (playToken()) live.start();
   if (me.role === 'student') { await syncAssignments(); scheduleReport(lr && lr.username ? 1000 : 5000); }
   if (me.role === 'coach') await syncReports();
-  go('home');
+  go(lr && lr.play ? 'lichess' : 'home');
 }
 
 // Student: assignments targeted at me that are not imported yet.
@@ -179,6 +182,8 @@ onSaveState(({ pending, errors }) => {
 function layout(content) { clear(app).append(h('div.shell', nav(), h('main.main', content))); }
 
 function go(id) {
+  // Fair play: no engine screens while a Lichess game is running.
+  if (live.game && !id.startsWith('lichess')) { toast('Lichess maçın sürüyor. Maç bitince diğer bölümlere geçebilirsin.', 'error'); return; }
   if (mounted && mounted.unmount) mounted.unmount();
   mounted = null;
   activeId = id;
@@ -187,6 +192,11 @@ function go(id) {
   window.scrollTo(0, 0);
   if (id === 'home') return renderHome(content);
   if (id === 'settings') return renderSettings(content);
+  if (id.startsWith('lichess:')) {
+    activeId = 'lichess'; layout(content);
+    lichessPlay.mount(content, { gameId: id.slice(8) }).then((r) => { mounted = r; });
+    return;
+  }
   if (id.startsWith('videos:')) {
     activeId = 'videos'; layout(content);
     videos.mount(content, { go, open: id.slice(7) }).then((r) => { mounted = r; });
@@ -295,7 +305,8 @@ async function renderSettings(root) {
   const drawLichess = async () => {
     const l = await getLink();
     clear(lichessBox).append(...(l
-      ? [h('b', '@' + l.username), h('button.btn.small.ghost', { onclick: async () => { await unlink(); toast('Lichess bağlantısı kaldırıldı'); drawLichess(); scheduleReport(1000); } }, 'Bağlantıyı kaldır')]
+      ? [h('b', '@' + l.username), h('span.muted.small', playToken() ? 'oyun izni: bu cihazda var' : 'oyun izni: yok'),
+        h('button.btn.small.ghost', { onclick: async () => { await unlink(); live.stop(); toast('Lichess bağlantısı kaldırıldı'); drawLichess(); scheduleReport(1000); } }, 'Bağlantıyı kaldır')]
       : [h('button.btn.small.primary', { onclick: () => startLink() }, 'Lichess ile bağlan')]));
   };
   drawLichess();

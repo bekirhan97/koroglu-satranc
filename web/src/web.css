@@ -109,3 +109,22 @@
 .lichess-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-color: var(--gold); }
 .lichess-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .lichess-perf { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; }
+
+/* ---------- Lichess'te Oyna ---------- */
+.lichess-lobby .two-col { align-items: start; }
+.challenge-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.challenge-row:last-child { border-bottom: 0; }
+.challenge-panel { border-color: var(--gold); background: #fff8e8; }
+.tc-row { flex-wrap: wrap; }
+.btn.tc { display: flex; flex-direction: column; align-items: center; min-width: 76px; padding: 10px 12px; }
+.seek-wait { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.spinner { width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.friend-list { margin: 8px 0; }
+.lp-player { display: flex; justify-content: space-between; align-items: center; width: min(100%, 640px); padding: 6px 4px; font-weight: 600; }
+.lp-clock { font-variant-numeric: tabular-nums; background: #e8e2d6; color: var(--ink); padding: 4px 12px; border-radius: 8px; font-size: 20px; }
+.lp-clock.run { background: var(--side); color: var(--gold); }
+.lp-status { font-size: 18px; font-weight: 700; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); margin-bottom: 10px; }
+.lp-status.win { background: #e6f4ea; color: var(--good); }
+.lp-status.loss { background: #fbeaea; color: var(--bad); }
+.lp-moves { display: flex; flex-wrap: wrap; gap: 4px 8px; max-height: 300px; overflow: auto; margin-top: 12px; font-size: 14px; }
