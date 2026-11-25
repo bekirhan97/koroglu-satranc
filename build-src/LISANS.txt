@@ -1,0 +1,16 @@
+Köroğlu Satranç – Köroğlu Satranç Akademi
+
+Bu program özgür yazılımdır: GNU Genel Kamu Lisansı sürüm 3 (GPL-3.0) ya da
+(tercihinize göre) daha sonraki bir sürümün koşulları altında dağıtabilir ve/veya
+değiştirebilirsiniz. Kaynak kodu: https://github.com/bekirhan97/koroglu-satranc
+
+Program HİÇBİR GARANTİ OLMADAN sunulmaktadır.
+
+İçerdiği bileşenler:
+- Stockfish 17.1 (GPL-3.0) – https://stockfishchess.org
+- Maia Chess ağırlıkları (GPL-3.0) – https://maiachess.com
+- chessground (GPL-3.0), chess.js (BSD-2)
+- Lichess bulmaca veritabanı ve açılış isimleri (CC0) – https://lichess.org
+- Electron (MIT)
+
+Lisans metinleri uygulama klasöründeki "licenses" klasöründe bulunur.

@@ -30,8 +30,8 @@ async function checkMac() {
     const rel = await r.json();
     const v = String(rel.tag_name || '').replace(/^v/, '');
     if (v && newer(v, app.getVersion())) {
-      const arch = process.arch === 'arm64' ? 'AppleSilicon' : 'Intel';
-      const asset = (rel.assets || []).find((a) => a.name.includes('Mac') && a.name.includes(arch));
+      const want = process.platform === 'win32' ? '-Windows-Setup.exe' : `-Mac-${process.arch}.zip`;
+      const asset = (rel.assets || []).find((a) => a.name.endsWith(want));
       setState({ status: 'manual', version: v, url: asset ? asset.browser_download_url : RELEASES_URL, notes: rel.body || '' });
     } else setState({ status: 'latest' });
   } catch (e) {

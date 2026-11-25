@@ -245,11 +245,49 @@ app.whenReady().then(() => {
   win.webContents.on('did-finish-load', notifyFiles);
   updater.init((s) => { if (win && !win.isDestroyed()) win.webContents.send('update:state', s); });
 
+  if (process.env.KOROGLU_SELFTEST) selfTest(process.env.KOROGLU_SELFTEST);
+
   // Daily automatic backup (a little after start, so it never slows down opening the app).
   setTimeout(() => {
     try { const r = backup.autoBackup(dataDir(), backupDir(), app.getVersion()); if (r) log.info('Otomatik yedek:', r.path); }
     catch (e) { log.error('Otomatik yedek alınamadı:', e); }
   }, 15000).unref();
 });
+
+// Packaged-build smoke test (used by the release workflow on real Windows/macOS machines):
+// starts the engine, reads Maia + puzzles, checks the UI rendered, writes a JSON result and quits.
+async function selfTest(outFile) {
+  const res = { version: app.getVersion(), platform: `${process.platform}-${process.arch}`, checks: {} };
+  const step = async (name, fn) => { try { res.checks[name] = { ok: true, info: await fn() }; } catch (e) { res.checks[name] = { ok: false, error: String(e && e.message || e) }; } };
+  await new Promise((r) => (win.webContents.isLoading() ? win.webContents.once('did-finish-load', r) : r()));
+  await new Promise((r) => setTimeout(r, 3000));
+  await step('engine', async () => {
+    const r = await getEngine().analyse({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', depth: 12, multipv: 1 }, 0);
+    if (!r.bestmove) throw new Error('bestmove yok');
+    return `${getEngine().name}: ${r.bestmove}`;
+  });
+  await step('maia', () => { const n = fs.readdirSync(path.join(resRoot, 'maia')).filter((f) => f.endsWith('.bin')).length; if (n !== 9) throw new Error(n + ' ağ'); return n + ' ağ'; });
+  await step('puzzles', () => { const n = JSON.parse(fs.readFileSync(path.join(resRoot, 'puzzles.json'), 'utf8')).puzzles.length; if (n < 50000) throw new Error(n); return n; });
+  await step('ui', async () => {
+    const t = await win.webContents.executeJavaScript("document.querySelector('.brand-name') ? document.querySelector('.brand-name').textContent : (document.querySelector('.modal h3') || {}).textContent || ''");
+    if (!t) throw new Error('arayüz boş');
+    return t;
+  });
+  await step('maiaMove', () => win.webContents.executeJavaScript(`(async () => {
+    const w = new Worker('maia-worker.js', { type: 'module' });
+    const call = (m, tr) => new Promise((ok, no) => { w.onmessage = (e) => e.data.ok ? ok(e.data) : no(new Error(e.data.error)); w.postMessage({ ...m, id: 1 }, tr || []); });
+    await call({ type: 'tables', tables: await window.api.maiaTables() });
+    const b = await window.api.maiaWeights(1500); const buf = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+    await call({ type: 'load', elo: 1500, buffer: buf }, [buf]);
+    const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const r = await call({ type: 'policy', elo: 1500, history: [fen], legal: ['e2e4', 'd2d4', 'g1f3', 'c2c4', 'a2a3'] });
+    w.terminate(); return r.policy[0].uci;
+  })()`));
+  res.ok = Object.values(res.checks).every((c) => c.ok);
+  fs.writeFileSync(outFile, JSON.stringify(res, null, 2));
+  log.info('Öz test:', JSON.stringify(res));
+  if (engine) engine.quit();
+  app.exit(res.ok ? 0 : 1);
+}
 
 app.on('window-all-closed', () => { if (engine) engine.quit(); app.quit(); });

@@ -1,24 +1,160 @@
 {
   "name": "koroglu-satranc",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Köroğlu Satranç çalışma uygulaması",
   "main": "src/main/main.cjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --import ./test/setup.mjs --test test/*.test.mjs",
     "build": "node scripts/build.mjs",
-    "start": "node scripts/build.mjs && electron ."
+    "start": "node scripts/build.mjs && electron .",
+    "dist:win": "node scripts/build.mjs --minify && electron-builder --win --x64",
+    "dist:mac": "node scripts/build.mjs --minify && electron-builder --mac --arm64 --x64"
   },
   "keywords": [],
-  "author": "Köroğlu Satranç",
+  "author": {
+    "name": "Köroğlu Satranç Akademi"
+  },
   "license": "GPL-3.0-or-later",
   "devDependencies": {
     "@electron/packager": "^20.3.0",
     "chess.js": "^1.4.0",
     "chessground": "^9.2.1",
     "electron": "^33.4.11",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
     "playwright": "^1.65.1"
   },
   "type": "module",
-  "productName": "Köroğlu Satranç"
+  "productName": "Köroğlu Satranç",
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "homepage": "https://github.com/bekirhan97/koroglu-satranc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bekirhan97/koroglu-satranc.git"
+  },
+  "build": {
+    "appId": "com.koroglu.satranc",
+    "productName": "Köroğlu Satranç",
+    "copyright": "Köroğlu Satranç Akademi · GPL-3.0",
+    "directories": {
+      "output": "out",
+      "buildResources": "build-src"
+    },
+    "files": [
+      "package.json",
+      "src/main/**",
+      "dist/**",
+      "!dist/**/*.map",
+      "build-src/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/engines/${platform}-${arch}",
+        "to": "engines/${platform}-${arch}"
+      },
+      {
+        "from": "resources/openings.json",
+        "to": "openings.json"
+      },
+      {
+        "from": "resources/puzzles.json",
+        "to": "puzzles.json"
+      },
+      {
+        "from": "resources/maia",
+        "to": "maia"
+      },
+      {
+        "from": "resources/licenses",
+        "to": "licenses"
+      }
+    ],
+    "asar": true,
+    "fileAssociations": [
+      {
+        "ext": "kpaket",
+        "name": "Köroğlu ödev paketi",
+        "description": "Köroğlu Satranç ödev paketi",
+        "role": "Viewer",
+        "icon": "icon"
+      },
+      {
+        "ext": "krapor",
+        "name": "Köroğlu ilerleme raporu",
+        "description": "Köroğlu Satranç ilerleme raporu",
+        "role": "Viewer",
+        "icon": "icon"
+      },
+      {
+        "ext": "kyedek",
+        "name": "Köroğlu yedeği",
+        "description": "Köroğlu Satranç yedeği",
+        "role": "None",
+        "icon": "icon"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "bekirhan97",
+        "repo": "koroglu-satranc",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build-src/icon.ico",
+      "executableName": "Koroglu Satranc",
+      "artifactName": "KorogluSatranc-${version}-Windows-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Köroğlu Satranç",
+      "installerIcon": "build-src/icon.ico",
+      "uninstallerIcon": "build-src/icon.ico",
+      "installerLanguages": [
+        "tr_TR"
+      ],
+      "language": "1055",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "license": "build-src/LISANS.txt"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build-src/icon.icns",
+      "category": "public.app-category.education",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "KorogluSatranc-${version}-Mac-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ]
+    }
+  }
 }

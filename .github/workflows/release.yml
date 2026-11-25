@@ -1,0 +1,116 @@
+# Builds and publishes a release when a tag like v0.3.0 is pushed:
+#   Windows: NSIS Setup.exe (+ latest.yml for automatic updates)
+#   macOS:   zip for Apple Silicon and Intel (unsigned, ad-hoc signed)
+# Every package is launched once in self-test mode on its own operating system before upload.
+name: Sürüm
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sürüm sayfasını oluştur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ -f "docs/surum-notlari/${TAG}.md" ]; then NOTES="docs/surum-notlari/${TAG}.md"; else echo "Köroğlu Satranç ${TAG}" > /tmp/n.md; NOTES=/tmp/n.md; fi
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Köroğlu Satranç ${TAG#v}" --notes-file "$NOTES"
+
+  windows:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: bash scripts/fetch-engines.sh win32-x64
+      - name: Derle
+        run: |
+          node scripts/build.mjs --minify
+          Remove-Item dist\*.map -ErrorAction SilentlyContinue
+          npx electron-builder --win --x64 --publish never
+      - name: Öz test (paketlenmiş uygulama)
+        shell: pwsh
+        run: |
+          $env:KOROGLU_DATA_DIR = "$env:RUNNER_TEMP\kdata"
+          $env:KOROGLU_SELFTEST = "$env:RUNNER_TEMP\selftest.json"
+          $p = Start-Process -FilePath "out\win-unpacked\Koroglu Satranc.exe" -PassThru
+          if (-not $p.WaitForExit(180000)) { $p.Kill(); throw "öz test zaman aşımı" }
+          Get-Content $env:KOROGLU_SELFTEST
+          if ((Get-Content $env:KOROGLU_SELFTEST | ConvertFrom-Json).ok -ne $true) { throw "öz test başarısız" }
+      - name: Kurulum dosyasını sessiz kur ve kurulu uygulamayı test et
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem out\*-Windows-Setup.exe | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "Koroglu Satranc.exe" | Select-Object -First 1
+          if (-not $exe) { throw "kurulum bulunamadı" }
+          $env:KOROGLU_DATA_DIR = "$env:RUNNER_TEMP\kdata2"
+          $env:KOROGLU_SELFTEST = "$env:RUNNER_TEMP\selftest2.json"
+          $p = Start-Process -FilePath $exe.FullName -PassThru
+          if (-not $p.WaitForExit(180000)) { $p.Kill(); throw "öz test zaman aşımı" }
+          Get-Content $env:KOROGLU_SELFTEST
+          if ((Get-Content $env:KOROGLU_SELFTEST | ConvertFrom-Json).ok -ne $true) { throw "kurulu uygulama öz testi başarısız" }
+      - name: Yükle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release upload "${GITHUB_REF_NAME}" out/*-Windows-Setup.exe out/*-Windows-Setup.exe.blockmap out/latest.yml --clobber
+
+  mac:
+    needs: release
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: bash scripts/fetch-engines.sh darwin-arm64 darwin-x64
+      - name: Derle
+        run: |
+          node scripts/build.mjs --minify
+          rm -f dist/*.map
+          npx electron-builder --mac --arm64 --x64 --publish never
+      - name: Öz test (Apple Silicon)
+        run: |
+          APP="$(ls -d out/mac-arm64/*.app | head -1)"
+          codesign --verify --deep --verbose=1 "$APP" || true
+          xattr -cr "$APP"
+          BIN="$(ls "$APP/Contents/MacOS/" | head -1)"
+          KOROGLU_DATA_DIR="$RUNNER_TEMP/kdata" KOROGLU_SELFTEST="$RUNNER_TEMP/selftest.json" timeout 180 "$APP/Contents/MacOS/$BIN" || true
+          cat "$RUNNER_TEMP/selftest.json"
+          node -e "process.exit(require(process.env.RUNNER_TEMP + '/selftest.json').ok ? 0 : 1)"
+      - name: Öz test (Intel, Rosetta ile)
+        continue-on-error: true
+        run: |
+          softwareupdate --install-rosetta --agree-to-license >/dev/null 2>&1 || true
+          APP="$(ls -d out/mac/*.app | head -1)"
+          xattr -cr "$APP"
+          BIN="$(ls "$APP/Contents/MacOS/" | head -1)"
+          KOROGLU_DATA_DIR="$RUNNER_TEMP/kdata2" KOROGLU_SELFTEST="$RUNNER_TEMP/selftest2.json" timeout 240 arch -x86_64 "$APP/Contents/MacOS/$BIN" || true
+          cat "$RUNNER_TEMP/selftest2.json"
+          node -e "process.exit(require(process.env.RUNNER_TEMP + '/selftest2.json').ok ? 0 : 1)"
+      - name: Yükle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" out/*-Mac-*.zip out/latest-mac.yml --clobber
