@@ -5,6 +5,7 @@ import { store } from '../../core/store.js';
 import { ratingChart, barChart } from '../../core/charts.js';
 import { pdata, pickPuzzle, themeCounts, parsePuzzlePgn, recordResult, dueReviews, nextReviewAt, gradeReview, themeAnalysis, MIN_N, GRADUATE_LEVEL } from './data.js';
 import { LEVEL_NAMES } from '../../core/srs.js';
+import { showStorm } from './storm.js';
 import { PuzzleSolver } from './solver.js';
 import { THEME_GROUPS, themeName } from './themes.js';
 
@@ -26,7 +27,7 @@ export default {
     clear(root).append(h('div.module', h('div.module-head', h('h2', this.title), tabsHost), body));
     const swap = (v) => { if (current && current.destroy) current.destroy(); current = v; };
     const setTabs = (active) => clear(tabsHost).append(...[
-      ['train', 'Antrenman', showTrain], ['review', 'Tekrar', showReview], ['themes', 'Temalar', showThemes], ['sets', 'Setlerim', showSets], ['stats', 'İstatistikler', showStats],
+      ['train', 'Antrenman', showTrain], ['storm', '⚡ Storm', showStormTab], ['review', 'Tekrar', showReview], ['themes', 'Temalar', showThemes], ['sets', 'Setlerim', showSets], ['stats', 'İstatistikler', showStats],
     ].map(([k, l, f]) => h('button.tab' + (active === k ? '.active' : ''), { onclick: f }, l,
       k === 'review' && dueReviews().length ? h('span.count', dueReviews().length) : null)),
     pill);
@@ -65,6 +66,12 @@ export default {
       clear(body).append(host);
       const v = new PuzzleSolver(host, p, { rated: true, onNext: next, header: bar });
       swap(v); v.mount();
+    }
+
+    // ---------- Puzzle Storm ----------
+    function showStormTab() {
+      setTabs('storm'); swap(null);
+      showStorm(body, { setActive: (stop) => swap({ destroy: stop }) });
     }
 
     // ---------- missed puzzles (spaced repetition, unrated) ----------

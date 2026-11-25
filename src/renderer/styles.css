@@ -465,3 +465,35 @@ table.kv.asg td:last-child { width: 160px; }
 .badge-bar span { display: block; height: 100%; background: var(--gold-2); }
 .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .badge-chip { background: #faf1dc; border: 1px solid var(--gold); border-radius: 14px; padding: 3px 10px; font-size: 13px; }
+
+/* ---------- 0.4: Puzzle Storm ---------- */
+.storm-start, .storm-end { max-width: 760px; margin: 20px auto; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 0 20px; }
+.storm-hero { text-align: center; }
+.storm-hero h2 { margin: 4px 0; font-size: 30px; }
+.storm-hero p { max-width: 560px; }
+.storm-bolt { font-size: 56px; line-height: 1; }
+.storm-seg button { min-width: 120px; }
+.storm-go { min-width: 220px; font-size: 20px; padding: 12px 24px; }
+.storm-records { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+.storm-end .cards, .storm-end .panel, .storm-start .panel { width: 100%; }
+.storm-layout { display: grid; grid-template-columns: minmax(420px, 1fr) 280px; gap: 24px; padding: 16px 24px; align-items: start; }
+.storm-side { display: flex; flex-direction: column; gap: 10px; align-items: stretch; text-align: center; }
+.storm-clock { font-size: 54px; font-weight: 800; font-variant-numeric: tabular-nums; background: var(--side); color: var(--gold); border-radius: 14px; padding: 8px; }
+.storm-clock.low { background: var(--bad); color: #fff; }
+.storm-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-top: 6px; }
+.storm-score { font-size: 64px; font-weight: 800; line-height: 1; color: var(--accent); }
+.storm-combo { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+.storm-combo-n { font-weight: 700; }
+.storm-combo-bar { height: 8px; background: #efe9df; border-radius: 4px; margin: 6px 0 4px; overflow: hidden; }
+.storm-combo-bar span { display: block; height: 100%; background: var(--gold); transition: width .2s; }
+.storm-flash { min-height: 28px; font-size: 22px; font-weight: 800; }
+.storm-flash.good { color: var(--good); }
+.storm-flash.bad { color: var(--bad); }
+.storm-hist { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; max-height: 120px; overflow: hidden; }
+.storm-hist span { width: 20px; height: 20px; border-radius: 4px; font-size: 12px; display: grid; place-items: center; color: #fff; }
+.storm-hist .ok { background: var(--good); }
+.storm-hist .bad { background: var(--bad); }
+.storm-results { display: flex; flex-wrap: wrap; gap: 6px; }
+.storm-res { border: 0; border-radius: 6px; padding: 4px 8px; font-size: 13px; color: #fff; cursor: pointer; }
+.storm-res.ok { background: var(--good); }
+.storm-res.bad { background: var(--bad); }
