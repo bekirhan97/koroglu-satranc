@@ -10,7 +10,9 @@ test('Storm bulmacaları kolaydan zora, tekrarsız', () => {
   assert.equal(l.length, 60);
   assert.equal(new Set(l.map((p) => p.id)).size, 60);
   const avg = (a) => a.reduce((x, p) => x + p.rating, 0) / a.length;
-  assert.ok(avg(l.slice(0, 10)) < 1000 && avg(l.slice(50)) > 2700 - 700, 'zorlaşıyor');
+  const a = avg(l.slice(0, 10)), b = avg(l.slice(25, 35)), c = avg(l.slice(50));
+  assert.ok(a < 1100 && b > a + 400 && c > b, 'zorlaşıyor');
+  assert.ok(b - a > c - b, 'artış giderek azalıyor');
   assert.ok(l[0].rating < 800);
 });
 
