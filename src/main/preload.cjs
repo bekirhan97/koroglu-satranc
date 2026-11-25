@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld('api', {
   saveFile: (kind, name, data) => ipcRenderer.invoke('file:save', kind, name, data),
   openFiles: (kind) => ipcRenderer.invoke('file:open', kind),
   takeFiles: () => ipcRenderer.invoke('app:takeFiles'),
+  savePdf: (html, name) => ipcRenderer.invoke('pdf:save', html, name),
+  showFile: (p) => ipcRenderer.invoke('app:showFile', p),
   onFilesWaiting: listen('app:filesWaiting'),
 
   updateState: () => ipcRenderer.invoke('update:state'),

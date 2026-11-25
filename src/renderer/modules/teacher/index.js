@@ -9,6 +9,8 @@ import { odata } from '../openings/data.js';
 import { THEME_GROUPS, themeName } from '../puzzles/themes.js';
 import { tcLabel } from '../play/index.js';
 import { BADGES } from '../../core/badges.js';
+import { parentReportHtml } from '../../core/parentReport.js';
+import brandLogo from '../../assets/brand.png';
 
 const api = window.api;
 const ago = (t) => { const d = Math.floor((Date.now() - t) / 86400e3); return d <= 0 ? 'bugün' : d === 1 ? 'dün' : `${d} gün önce`; };
@@ -96,6 +98,7 @@ export default {
       clear(body).append(h('div.stats-page.student-page',
         h('div.toolbar', h('button.btn.small', { onclick: showStudents }, '◂ Öğrencilerim'), h('span.spacer'),
           h('span.muted', `Rapor: ${fmtDate(r.createdAt)} · uygulama ${r.appVersion}`),
+          h('button.btn.small.primary', { onclick: () => parentReport(s) }, 'Veli raporu (PDF)'),
           h('button.btn.small.ghost', { onclick: () => modal({ title: 'Öğrenci silinsin mi?', body: h('p', `${s.name} ve tüm raporları bu bilgisayardan silinecek.`),
             actions: [{ label: 'Vazgeç' }, { label: 'Sil', primary: true, onClick: async () => { await students.remove(id); showStudents(); } }] }) }, 'Sil')),
         h('div.cards',
@@ -138,6 +141,26 @@ export default {
                 h('td', g.result === '1/2-1/2' ? '½' : (g.result === '1-0') === (g.side === 'w') ? h('span.ok-text', 'Kazandı') : h('span.bad-text', 'Kaybetti'))))) : null))),
         r.gtm.games.length ? h('div.panel', h('div.panel-title', 'Hamleyi Tahmin Et – son oyunlar'),
           h('table.kv', r.gtm.games.slice(0, 10).map((g) => h('tr', h('td', fmtDate(g.at)), h('td', `${g.white} – ${g.black}`), h('td', `ort. ${g.avg}`), h('td', `usta hamlesi %${g.master}`), h('td', g.rated ? sign(g.change) : 'puansız'))))) : null));
+    }
+
+    // ---------- parent report (PDF) ----------
+    async function logoDataUrl() {
+      return String(brandLogo).startsWith('data:') ? brandLogo : ''; // the bundler inlines the logo as a data URL
+    }
+    function parentReport(s) {
+      const ta = h('textarea.paste', { rows: 5, placeholder: 'Örn. Ayşe bu ay çok düzenli çalıştı. Önümüzdeki dönemde açmaz ve şiş temalarına ağırlık vereceğiz.' });
+      modal({
+        title: `Veli raporu: ${s.name}`,
+        body: h('div', h('p.muted.small', `Son raporu (${fmtDate(s.last.createdAt)}) temel alan tek sayfalık bir PDF hazırlanır: puan gelişimi, çalışma günleri, güçlü ve zayıf konular, ödevler, sınavlar ve rozetler.`),
+          h('label.form-l', 'Öğretmenin notu (isteğe bağlı)'), ta),
+        actions: [{ label: 'Vazgeç' }, { label: 'PDF oluştur…', primary: true, onClick: async () => {
+          const html = parentReportHtml(s.last, { note: ta.value.trim(), teacher: store.profile.name, logo: await logoDataUrl() });
+          const d = new Date();
+          const p = await api.savePdf(html, `${s.name} - veli raporu ${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`.replace(/[\\/:*?"<>|]/g, '-'));
+          if (p && p.error) toast('PDF oluşturulamadı: ' + p.error, 'error');
+          else if (p) { toast('Veli raporu kaydedildi. Dosyayı veliye WhatsApp ya da e-posta ile gönderebilirsiniz.', 'ok'); api.showFile(p); }
+        } }],
+      });
     }
 
     // ---------- package builder ----------

@@ -237,6 +237,20 @@ app.whenReady().then(() => {
     if (r.canceled) return [];
     return r.filePaths.map(readExchange);
   });
+  // Print an HTML document (built by the renderer) to an A4 PDF and save it where the user chooses.
+  ipcMain.handle('pdf:save', async (_e, html, defaultName) => {
+    const r = await saveDialog('PDF olarak kaydet', path.join(app.getPath('desktop'), `${defaultName}.pdf`), [{ name: 'PDF', extensions: ['pdf'] }]);
+    if (r.canceled || !r.filePath) return null;
+    const pw = new BrowserWindow({ show: false, webPreferences: { javascript: false, offscreen: true } });
+    try {
+      await pw.loadURL('data:text/html;charset=utf-8;base64,' + Buffer.from(html, 'utf8').toString('base64'));
+      const pdf = await pw.webContents.printToPDF({ pageSize: 'A4', printBackground: true, margins: { marginType: 'none' } });
+      fs.writeFileSync(r.filePath, pdf);
+      return r.filePath;
+    } catch (e) { log.error('PDF oluşturulamadı:', e); return { error: e.message }; }
+    finally { pw.destroy(); }
+  });
+  ipcMain.handle('app:showFile', (_e, p) => { if (typeof p === 'string' && p.endsWith('.pdf')) shell.showItemInFolder(p); return true; });
   ipcMain.handle('app:takeFiles', () => pendingFiles.splice(0).map(readExchange));
 
   // ---------- updates ----------
