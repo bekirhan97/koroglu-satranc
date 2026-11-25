@@ -514,3 +514,15 @@ table.exam-review td { text-align: left; padding: 4px 6px; border-bottom: 1px so
 .exam-score { padding: 2px 10px; border-radius: 12px; background: #eee8dd; }
 .exam-score.hi { background: #d9efdf; color: var(--good); }
 .exam-score.lo { background: #f6d9d5; color: var(--bad); }
+
+/* ---------- 0.4: my Lichess games ---------- */
+.mg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.mg-card { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; }
+.mg-card:hover { border-color: var(--accent); }
+.mg-card.ok { opacity: .65; }
+.mg-card.fail { border-color: #e2b4ad; }
+.mg-kind { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #9a6b16; font-weight: 700; }
+.mg-kind.big { color: var(--bad); }
+.mg-status { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.mg-card.ok .mg-status { color: var(--good); }
+.mg-solution { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }

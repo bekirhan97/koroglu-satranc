@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, net } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { UciEngine } = require('./engine.cjs');
@@ -251,6 +251,18 @@ app.whenReady().then(() => {
     finally { pw.destroy(); }
   });
   ipcMain.handle('app:showFile', (_e, p) => { if (typeof p === 'string' && p.endsWith('.pdf')) shell.showItemInFolder(p); return true; });
+  // A student's recent games from the public Lichess API (ndjson, standard games only are kept later).
+  ipcMain.handle('lichess:games', async (_e, user, max) => {
+    if (!/^[\w-]{2,30}$/.test(String(user))) return { error: 'Geçersiz kullanıcı adı' };
+    const url = `https://lichess.org/api/games/user/${encodeURIComponent(user)}?max=${Math.min(100, +max || 30)}&moves=true&opening=false&clocks=false&evals=false&perfType=bullet,blitz,rapid,classical,correspondence`;
+    try {
+      const r = await net.fetch(url, { headers: { Accept: 'application/x-ndjson', 'User-Agent': `KorogluSatranc/${app.getVersion()}` } });
+      if (r.status === 404) return { error: 'Bu kullanıcı Lichess\'te bulunamadı' };
+      if (r.status === 429) return { error: 'Lichess şu an çok yoğun; bir dakika sonra tekrar deneyin' };
+      if (!r.ok) return { error: 'Lichess yanıtı: ' + r.status };
+      return { text: await r.text() };
+    } catch (e) { log.warn('Lichess:', e.message); return { error: 'Lichess\'e bağlanılamadı (internet bağlantınızı kontrol edin)' }; }
+  });
   ipcMain.handle('app:takeFiles', () => pendingFiles.splice(0).map(readExchange));
 
   // ---------- updates ----------
