@@ -33,7 +33,8 @@ async function newPage(viewport = { width: 1280, height: 820 }) {
   });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text() + ' ' + JSON.stringify(m.location())); });
+  page.on('response', (r) => { if (r.status() >= 400) errors.push('http ' + r.status() + ' ' + r.url()); });
   return page;
 }
 const shot = (page, n) => page.screenshot({ path: `${OUT}/${n}.png` });
@@ -208,6 +209,18 @@ await c.click('.modal button:has-text("Ekle")'); await c.waitForTimeout(1500);
 console.log('  tek seferlik ders sonrası kart:', await c.locator('.lesson').count());
 await shot(c, '07h-program');
 
+step('ders kartından ödev ver');
+await c.locator('.lesson:not(.tek)').first().click(); await c.waitForTimeout(1500);
+await c.click('.modal button:has-text("Bu dersten ödev ver")'); await c.waitForTimeout(2000);
+console.log('  ders bağlantı bandı:', await c.locator('.lesson-banner').count());
+await c.fill('input.big-input[placeholder^="Örn. Hafta"]', 'Ders ödevi – Çatal');
+await c.click('button:has-text("Tema seçkisi ekle")'); await c.waitForTimeout(1200);
+await c.click('button:has-text("Öğrencilere gönder")'); await c.waitForTimeout(2500);
+console.log('  ders öğrencileri önceden seçili:', await c.locator('.modal .pick input:checked').count());
+await c.click('.modal button:has-text("Gönder")'); await c.waitForTimeout(2500);
+const lessonAsg = MOCK.db.assignments.find((a) => a.title === 'Ders ödevi – Çatal');
+console.log('  ödev derse bağlandı:', JSON.stringify(lessonAsg && lessonAsg.package.lesson), '· programa döndü:', await c.locator('.week-grid').count());
+
 step('öğrenci girişi');
 const s = await newPage({ width: 390, height: 844 });
 await s.goto(URL); await s.waitForTimeout(2500);
@@ -221,6 +234,7 @@ await s.click('button:has-text("Giriş yap")');
 await s.waitForSelector('.home', { timeout: 20000 }); await s.waitForTimeout(2500);
 await shot(s, '09-ogrenci-ana-telefon');
 console.log('  sonraki ders kartı:', await s.locator('.next-lesson').count());
+console.log('  devam et kartı:', await s.locator('.continue-card').textContent().catch(() => 'yok'));
 console.log('  ödev görünüyor:', await s.locator('.asg-title').count(), '· duyuru:', await s.locator('.ann-panel .ann-row').count(), '· sıralama:', await s.locator('.lb-panel').count(), '· kurulum kartı:', await s.locator('.install-card').count());
 
 await nav(s, 'Program'); await s.waitForTimeout(1500);
@@ -319,11 +333,20 @@ await s.click('.storm-side button:has-text("Atla")'); await s.waitForTimeout(800
 await shot(s, '14-streak');
 await s.click('.storm-side button:has-text("Bitir")'); await s.waitForTimeout(1500);
 
-step('ödev setini çöz');
+step('ödev setini çöz (Devam et kartından)');
+await nav(s, 'Ana Sayfa'); await s.waitForTimeout(2000);
+console.log('  devam et kartı şimdi:', await s.locator('.continue-card').textContent().catch(() => 'yok'));
+await s.click('.asg:has-text("Ders ödevi") .asg-part:has-text("bulmaca")'); await s.waitForTimeout(2000);
+console.log('  doğrudan ödev setinde:', await s.locator('.pz-bar button:has-text("Ödevlere dön")').count(), '·', await s.locator('.pz-bar').first().textContent());
+await s.click('button:has-text("Çözümü göster")'); await s.waitForTimeout(2500);
+await s.click('.controls button.btn.primary'); await s.waitForTimeout(1500);
+await shot(s, '16-set-bulmaca');
+await nav(s, 'Ana Sayfa'); await s.waitForTimeout(2000);
+console.log('  devam et kartı sonra:', await s.locator('.continue-card').textContent().catch(() => 'yok'));
+await shot(s, '16b-devam-et');
+await nav(s, 'Bulmaca'); await s.waitForTimeout(800);
 await s.click('.tab:has-text("Setlerim")'); await s.waitForTimeout(800);
 await shot(s, '15-setlerim');
-await s.click('.set-card button:has-text("Başla")'); await s.waitForTimeout(1500);
-await shot(s, '16-set-bulmaca');
 
 step('raporu gönder (çıkış)');
 await nav(s, 'Ayarlar'); await s.waitForTimeout(800);
@@ -342,12 +365,31 @@ if (rows) { await c.click('table.students tbody tr'); await c.waitForTimeout(150
 
 step('antrenör: ödev takibi, sıralama, ödevi geri al');
 await c.click('.tab:has-text("Ödevler")'); await c.waitForTimeout(2000);
-await c.click('.asg-card button:has-text("Öğrenciler")'); await c.waitForTimeout(400);
+await c.locator('.asg-card button:has-text("Öğrenciler")').first().click(); await c.waitForTimeout(400);
+console.log('  ödev satırı:', (await c.locator('.asg-students tr').first().textContent()).replace(/\s+/g, ' '));
 await shot(c, '20-odevler');
+step('sonraki dersin kartında önceki ödevin özeti');
+const lessonCls = MOCK.db.classes[0];
+const lsn = MOCK.db.sessions.find((x) => x.class_id === lessonCls.id);
+lessonAsg.package.lesson.date = '2026-01-01';
+await c.click('.nav-item:has-text("Program")'); await c.waitForTimeout(1500);
+await c.locator('.lesson:not(.tek)').first().click(); await c.waitForTimeout(2500);
+console.log('  özet:', (await c.locator('.hw-summary').textContent().catch(() => 'yok')).replace(/\s+/g, ' '));
+await shot(c, '20b-ders-ozeti');
+const openBtn = c.locator('.hw-miss-row button:has-text("Tahtada aç")');
+if (await openBtn.count()) { await openBtn.first().click(); await c.waitForTimeout(1500); console.log('  tahtada açıldı:', await c.locator('.hw-board cg-board').count()); await shot(c, '20c-tahtada'); await c.locator('.modal button:has-text("Kapat")').last().click(); }
+await c.locator('.modal button:has-text("Vazgeç")').click().catch(() => {});
+step('hata kaydı');
+await c.evaluate(() => setTimeout(() => { throw new Error('Deneme hatası (test)'); }, 0)); await c.waitForTimeout(1500);
+await nav(c, 'Ayarlar'); await c.waitForTimeout(1500);
+console.log('  ayarlarda hata kaydı:', (await c.locator('.err-table').textContent().catch(() => 'yok')).replace(/\s+/g, ' '));
+await shot(c, '20d-hata-kaydi');
+console.log('  hata kaydı:', MOCK.db.client_errors.length, MOCK.db.client_errors[0] && MOCK.db.client_errors[0].message);
+await c.click('.nav-item:has-text("Antrenör")'); await c.waitForTimeout(800);
 await c.click('.tab:has-text("Sıralama")'); await c.waitForTimeout(1500);
 await shot(c, '21-siralama');
 await c.click('.tab:has-text("Ödevler")'); await c.waitForTimeout(1500);
-await c.click('.asg-card button:has-text("Geri al")'); await c.click('.modal button:has-text("Ödevi geri al")'); await c.waitForTimeout(1500);
+await c.locator('.asg-card button:has-text("Geri al")').first().click(); await c.click('.modal button:has-text("Ödevi geri al")'); await c.waitForTimeout(1500);
 console.log('  kalan ödev kartı:', await c.locator('.asg-card').count());
 step('öğrenci tekrar girer: ödev kalkmış olmalı');
 await s.fill('input[placeholder="Kullanıcı adı"]', studentUser); await s.fill('input[placeholder="Şifre"]', studentPass);

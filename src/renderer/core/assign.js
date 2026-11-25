@@ -192,16 +192,22 @@ export async function assignmentProgress(a) {
     parts.push({ kind: 'gtm', label: 'Tahmin Et oyunu', done, total: a.items.gtm.length });
   }
   if (a.items.sets.length) {
-    let done = 0, ok = 0, total = 0;
-    for (const id of a.items.sets) {
+    // first = solved correctly on the first try ('~id' keeps the first result; older progress falls back to the current one)
+    let done = 0, ok = 0, first = 0, total = 0;
+    const miss = [];
+    a.items.sets.forEach((id, si) => {
       const s = pdata.sets.find((x) => x.id === id);
-      if (!s) continue;
+      if (!s) return;
       const pr = pdata.progress[id] || {};
       total += s.puzzles.length;
-      done += s.puzzles.filter((p) => pr[p.id]).length;
-      ok += s.puzzles.filter((p) => pr[p.id] === 'ok').length;
-    }
-    parts.push({ kind: 'sets', label: 'bulmaca', done, total, ok });
+      s.puzzles.forEach((p, pi) => {
+        if (!pr[p.id]) return;
+        done++;
+        if (pr[p.id] === 'ok') ok++;
+        if ((pr['~' + p.id] || pr[p.id]) === 'ok') first++; else miss.push([si, pi]);
+      });
+    });
+    parts.push({ kind: 'sets', label: 'bulmaca', done, total, ok, first, miss });
   }
   if (a.items.reps.length) {
     let done = 0, total = 0;
@@ -314,3 +320,10 @@ export const sentPackages = {
   async load() { this.list = await api.read('teacher/packages', []); return this; },
   add(pkg) { this.list.push({ id: pkg.id, title: pkg.title, createdAt: pkg.createdAt, due: pkg.due, summary: packageSummary(pkg) }); return api.write('teacher/packages', this.list); },
 };
+
+// Coach-side text for one assignment part: attempted vs. correct on the first try.
+export function partText(p) {
+  if (p.kind === 'sets' && p.done && p.first != null) return `${p.done}/${p.total} bulmaca denendi · ${p.first} ilk denemede doğru`;
+  if (p.kind === 'sets' && p.done && p.ok != null) return `${p.done}/${p.total} bulmaca denendi · ${p.ok} doğru`;
+  return `${p.done}/${p.total} ${p.label}`;
+}

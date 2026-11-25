@@ -198,3 +198,29 @@ table.lb tr.me td { background: #fff3d6; font-weight: 700; }
   .day-col { min-height: 0; }
   .day-col:not(.today) .day-empty { display: none; }
 }
+
+/* Continue card (student home) */
+.continue-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; margin-bottom: 14px;
+  padding: 16px 18px; border-radius: 14px; border: 2px solid var(--accent); background: var(--panel); cursor: pointer; font: inherit; color: inherit; }
+.continue-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.cc-k { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); font-weight: 700; }
+.cc-title { font-size: 18px; font-weight: 700; margin: 2px 0; }
+.cc-go { flex: none; background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 10px; font-weight: 700; }
+
+/* Lesson homework */
+.lesson-hw { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.hw-summary { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.hw-miss { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.hw-miss-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hw-board .pz-layout { max-width: 100%; }
+.past-hw { display: block; margin-top: 4px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
+.lesson-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-color: var(--accent); margin-bottom: 12px; }
+.err-table td { vertical-align: top; }
+.err-msg { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; word-break: break-word; color: var(--bad); }
+
+/* Login extras */
+.login-l { align-self: flex-start; font-size: 13px; font-weight: 600; margin: 4px 0 -4px; }
+.pass-wrap { position: relative; width: 100%; }
+.pass-wrap .big-input { width: 100%; padding-right: 76px; box-sizing: border-box; }
+.pass-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 6px 8px; }
+.link-btn { border: 0; background: none; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; padding: 0; }

@@ -6,7 +6,9 @@
 // Coaches see and edit everything in the academy; students see their own lessons, cancellations and notes.
 import { supa } from './supa.js';
 import { h, clear, modal, toast, fmtDate } from '../../src/renderer/core/dom.js';
-import { academyStudents, academyCoaches, meta } from './coach.js';
+import { academyStudents, academyCoaches, meta, syncReports } from './coach.js';
+import { students as reports } from '../../src/renderer/core/assign.js';
+import { PuzzleSolver } from '../../src/renderer/modules/puzzles/solver.js';
 
 const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 const DAYS_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
@@ -134,7 +136,76 @@ async function ensureSession(l, me) {
   return data;
 }
 
+function lessonRef(l) { return l.cls ? { class_id: l.cls.id, date: l.date } : { session_id: l.session && l.session.id, date: l.date }; }
+const sameLesson = (a, b) => !!a && !!b && a.date === b.date && (a.class_id ? a.class_id === b.class_id : !!a.session_id && a.session_id === b.session_id);
+
+// Homework linked to lessons: "given in this lesson" and the summary of the previous lesson's homework.
+async function lessonHomework(l, host, close, me) {
+  const ref = lessonRef(l);
+  const giveBtn = h('button.btn.small.primary', { onclick: async () => {
+    // make sure the lesson exists as a session row, so students see the homework under their past lessons
+    try { const s = await ensureSession(l, me); if (!l.cls) ref.session_id = s.id; } catch (e) { /* the link still works for coaches */ }
+    window.__lessonCtx = { ref, studentIds: l.student_ids.slice(), label: `${l.name} · ${fmtDate(parseKey(l.date))}` };
+    close(); window.goTo('teacher');
+  } }, '📚 Bu dersten ödev ver');
+  clear(host).append(h('div.form-l', 'Ödev', h('span.spacer'), giveBtn), h('div.muted.small', 'Yükleniyor…'));
+  const { data, error } = await supa.from('assignments').select('id, title, package, created_at, assignment_targets(student_id)').order('created_at');
+  if (error) { clear(host).append(h('div.form-l', 'Ödev', h('span.spacer'), giveBtn), h('div.muted.small', 'Ödevler alınamadı.')); return; }
+  const linked = data.filter((a) => a.package && a.package.lesson);
+  const here = linked.filter((a) => sameLesson(a.package.lesson, ref));
+  let prev = [];
+  if (l.cls) {
+    const before = linked.filter((a) => a.package.lesson.class_id === l.cls.id && a.package.lesson.date < l.date);
+    const last = before.reduce((m, a) => (a.package.lesson.date > m ? a.package.lesson.date : m), '');
+    prev = before.filter((a) => a.package.lesson.date === last);
+  }
+  if (prev.length) await syncReports().catch(() => 0);
+  clear(host).append(...[h('div.form-l', 'Ödev', h('span.spacer'), giveBtn),
+    here.length ? h('div.muted.small', 'Bu derste verilen: ', here.map((a) => a.title).join(', ')) : null,
+    ...prev.map((a) => homeworkSummary(a)),
+    !here.length && !prev.length ? h('div.muted.small', 'Bu derse bağlı ödev yok. Verdiğin ödevin sonucu bir sonraki dersin kartında özetlenir.') : null].filter(Boolean));
+}
+
+function homeworkSummary(a) {
+  const targets = (a.assignment_targets || []).map((t) => t.student_id);
+  let done = 0, started = 0;
+  const miss = new Map();
+  for (const sid of targets) {
+    const rep = reports.map[sid] && reports.map[sid].last;
+    const pr = rep && rep.assignments ? rep.assignments.find((x) => x.id === a.id) : null;
+    if (!pr) continue;
+    if (pr.pct >= 1) done++; else if (pr.pct > 0) started++;
+    for (const part of pr.parts || []) for (const [si, pi] of part.miss || []) {
+      const k = si + ':' + pi;
+      miss.set(k, (miss.get(k) || 0) + 1);
+    }
+  }
+  const sets = a.package.sets || [];
+  const top = [...miss.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, n]) => {
+    const [si, pi] = k.split(':').map(Number);
+    const set = sets[si];
+    return set && set.puzzles[pi] ? { set, pi, n, puzzle: set.puzzles[pi] } : null;
+  }).filter(Boolean);
+  const when = a.package.lesson.date ? fmtDate(parseKey(a.package.lesson.date)) : '';
+  return h('div.hw-summary',
+    h('div', h('b', `Önceki dersin ödevi (${when}): `), a.title),
+    h('div', `Bitiren: ${done}/${targets.length} öğrenci`, started ? ` · ${started} yarıda` : '', targets.length - done - started ? ` · ${targets.length - done - started} başlamadı` : ''),
+    top.length ? h('div.hw-miss', h('div.muted.small', 'En çok hata yapılan sorular:'),
+      top.map((t) => h('div.hw-miss-row', h('span', `${sets.length > 1 ? t.set.name + ' · ' : ''}${t.pi + 1}. soru — ${t.n} öğrenci yanlış`),
+        h('button.btn.small', { onclick: () => showPuzzle(t.puzzle, `${t.pi + 1}. soru`) }, 'Tahtada aç'))))
+      : sets.length ? h('div.muted.small', 'Bulmacalarda hata kaydı yok.') : null);
+}
+
+function showPuzzle(p, title) {
+  const host = h('div.hw-board');
+  let v = null;
+  modal({ title, wide: true, body: host, actions: [{ label: 'Kapat' }], onClose: () => v && v.destroy && v.destroy() });
+  v = new PuzzleSolver(host, p, { rated: false, onFinish: () => 0, onNext: null, nextLabel: 'Kapat' });
+  v.mount();
+}
+
 function lessonDialog(l, att, me, done) {
+  const hwHost = h('div.lesson-hw');
   const marks = Object.fromEntries(att.map((a) => [a.student_id, a.status]));
   const note = h('textarea.paste', { rows: 3, placeholder: 'Bu derste ne işlendi? (örn. Çatal 2. bölüm, ödev: 10 bulmaca)' }, l.note || '');
   const rows = l.student_ids.map((sid) => {
@@ -151,7 +222,8 @@ function lessonDialog(l, att, me, done) {
     l.cancelled ? h('div.chip.warn', 'Bu ders iptal edildi') : null,
     h('div.form-l', 'Yoklama', h('span.spacer'), l.student_ids.length ? allCame : null),
     l.student_ids.length ? h('div.att-list', rows) : h('div.muted.small', 'Bu derse kayıtlı öğrenci yok.'),
-    h('div.form-l', 'Ders notu'), note);
+    h('div.form-l', 'Ders notu'), note,
+    hwHost);
   const save = async (status) => {
     try {
       const s = await ensureSession(l, me);
@@ -171,7 +243,8 @@ function lessonDialog(l, att, me, done) {
   if (l.kind === 'tek') actions.push({ label: 'Dersi sil', onClick: () => { supa.from('sessions').delete().eq('id', l.session.id).then(({ error }) => { if (error) toast(error.message, 'error'); else { toast('Ders silindi', 'ok'); done(); } }); } });
   actions.push(l.cancelled ? { label: 'İptali geri al', onClick: () => { save('planned'); } } : { label: 'Dersi iptal et', onClick: () => { save('cancelled'); } });
   actions.push({ label: 'Kaydet', primary: true, onClick: () => { save(null); } });
-  modal({ title: l.name, wide: true, body, actions });
+  const m = modal({ title: l.name, wide: true, body, actions });
+  lessonHomework(l, hwHost, () => m.close(), me);
 }
 
 // ---------- classes (repeating lessons) ----------
@@ -295,8 +368,10 @@ export async function nextLessons(limit = 5, days = 14) {
 
 async function studentView(body) {
   clear(body).append(h('div.empty', 'Yükleniyor…'));
-  let next = [], past = [], att = [];
+  let next = [], past = [], att = [], hw = [];
   try {
+    const { data: as } = await supa.from('assignments').select('id, title, package');
+    hw = (as || []).filter((a) => a.package && a.package.lesson);
     next = await nextLessons(8, 21);
     const { data: ps } = await supa.from('sessions').select('*, classes(name)').lt('date', dateKey(new Date())).order('date', { ascending: false }).limit(20);
     past = ps || [];
@@ -312,7 +387,9 @@ async function studentView(body) {
     h('div.panel', h('div.panel-title', 'Geçmiş dersler'),
       past.length ? past.map((s) => { const a = att.find((x) => x.session_id === s.id); return h('div.past-row',
         h('div', h('b', fmtDate(parseKey(s.date))), ' ', (s.classes && s.classes.name) || s.title || 'Ders', s.status === 'cancelled' ? h('span.chip.warn', 'İptal') : a ? h('span.chip' + (a.status === 'geldi' ? '.ok' : ''), attLabel[a.status]) : null),
-        s.note ? h('div.past-note', s.note) : null); })
+        s.note ? h('div.past-note', s.note) : null,
+        hw.filter((x) => sameLesson(x.package.lesson, s.class_id ? { class_id: s.class_id, date: s.date } : { session_id: s.id, date: s.date }))
+          .map((x) => h('button.past-hw', { onclick: () => window.goTo('home') }, '📚 Ödev: ', x.title))); })
         : h('div.muted', 'Henüz kayıtlı ders yok.'))));
 }
 

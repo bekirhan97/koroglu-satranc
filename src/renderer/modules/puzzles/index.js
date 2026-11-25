@@ -21,7 +21,7 @@ export default {
   ready: true,
   homeInfo: () => { const d = dueReviews().length; return `Bulmaca puanı: ${store.profile.ratings.puzzles.r.toFixed(0)} · ${pdata.history.length} çözüldü` + (d ? ` · ${d} tekrar bekliyor` : ''); },
 
-  mount(root) {
+  mount(root, opts = {}) {
     let current = null;
     const state = { theme: '', offset: 0 };
     const tabsHost = h('div.tabs');
@@ -182,21 +182,25 @@ export default {
         list.length ? list : h('div.empty', h('h3', 'Henüz set yok'), h('p', 'Öğrencilerinize kendi hazırladığınız bulmaca setlerini PGN olarak verebilirsiniz.'))));
     }
 
-    function solveSet(set, mode) {
+    function solveSet(set, mode, onDone) {
       const pr = (pdata.progress[set.id] = pdata.progress[set.id] || {});
       const queue = set.puzzles.filter((p) => (mode === 'fails' ? pr[p.id] === 'fail' : !pr[p.id]));
-      if (!queue.length) { toast(mode === 'fails' ? 'Hatalı bulmaca kalmadı' : 'Set tamamlandı!', 'ok'); showSets(); return; }
+      if (!queue.length) {
+        toast(mode === 'fails' ? 'Hatalı bulmaca kalmadı' : 'Set tamamlandı!', 'ok');
+        if (onDone) onDone(); else showSets();
+        return;
+      }
       setTabs('sets');
       const p = queue[0];
       const idx = set.puzzles.indexOf(p) + 1;
       const host = h('div.pz-host');
       clear(body).append(host);
       const header = h('div.pz-bar', h('b', set.name), h('span.muted', `Bulmaca ${idx}/${set.puzzles.length}`), h('span.spacer'),
-        h('button.btn.small.ghost', { onclick: showSets }, 'Setlere dön'));
+        h('button.btn.small.ghost', { onclick: onDone || showSets }, onDone ? 'Ödevlere dön' : 'Setlere dön'));
       const v = new PuzzleSolver(host, p, {
         rated: false, header,
-        onFinish: ({ ok, ms }) => { pr[p.id] = ok ? 'ok' : 'fail'; pdata.saveProgress(); recordResult({ ...p, id: `${set.id}:${p.id}` }, { ok, ms, rated: false }); return 0; },
-        onNext: () => solveSet(set, mode),
+        onFinish: ({ ok, ms }) => { if (!pr['~' + p.id]) pr['~' + p.id] = ok ? 'ok' : 'fail'; pr[p.id] = ok ? 'ok' : 'fail'; pdata.saveProgress(); recordResult({ ...p, id: `${set.id}:${p.id}` }, { ok, ms, rated: false }); return 0; },
+        onNext: () => solveSet(set, mode, onDone),
         nextLabel: queue.length > 1 ? 'Sonraki ▸' : 'Bitir',
       });
       swap(v); v.mount();
@@ -248,7 +252,12 @@ export default {
               h('td', x.rated ? (x.d >= 0 ? '+' : '') + x.d : '')))) : h('div.muted', 'Henüz bulmaca çözülmedi.')))));
     }
 
-    showTrain();
+    // Opened from an assignment: go straight to the first set with puzzles left (resumes where the student stopped).
+    const want = (opts.openSets || []).map((id) => pdata.sets.find((x) => x.id === id)).filter(Boolean);
+    const open = want.find((st) => { const pr = pdata.progress[st.id] || {}; return st.puzzles.some((q) => !pr[q.id]); });
+    if (open) solveSet(open, 'next', opts.onSetDone);
+    else if (want.length) showSets();
+    else showTrain();
     return { unmount: () => { swap(null); window.removeEventListener('ratings-changed', refreshPill); } };
   },
 };

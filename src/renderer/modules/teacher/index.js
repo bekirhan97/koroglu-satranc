@@ -2,7 +2,7 @@
 import { h, clear, modal, toast, fmtDate } from '../../core/dom.js';
 import { store } from '../../core/store.js';
 import { ratingChart } from '../../core/charts.js';
-import { students, sentPackages, buildPackage, packageSummary, isLichessUrl } from '../../core/assign.js';
+import { students, sentPackages, buildPackage, packageSummary, isLichessUrl, partText } from '../../core/assign.js';
 import { GOAL_KINDS } from '../../core/activity.js';
 import { pdata } from '../puzzles/data.js';
 import { odata } from '../openings/data.js';
@@ -46,7 +46,7 @@ export default {
     const tabsHost = h('div.tabs');
     const body = h('div.module-body.teacher');
     clear(root).append(h('div.module', h('div.module-head', h('h2', this.title), tabsHost), body));
-    const setTabs = (active, extra) => clear(tabsHost).append(...[
+    const setTabs = (active, extra) => (active !== 'package' && (window.__lessonCtx = null), clear(tabsHost)).append(...[
       h('button.tab' + (active === 'students' ? '.active' : ''), { onclick: showStudents }, 'Öğrencilerim'),
       window.webHooks ? h('button.tab' + (active === 'accounts' ? '.active' : ''), { onclick: showAccounts }, 'Hesaplar') : null,
       window.webHooks ? h('button.tab' + (active === 'assignments' ? '.active' : ''), { onclick: () => { setTabs('assignments'); window.webHooks.assignmentsTab(body); } }, 'Ödevler') : null,
@@ -140,7 +140,7 @@ export default {
             h('td', h('b.exam-score' + (e.score >= 85 ? '.hi' : e.score < 50 ? '.lo' : ''), `${e.score} puan`)))))) : null,
         r.assignments.length ? h('div.panel', h('div.panel-title', 'Ödevler'),
           h('table.kv.asg', r.assignments.map((a) => h('tr',
-            h('td', h('b', a.title), h('div.sub', a.parts.map((p) => `${p.done}/${p.total} ${p.label}`).join(' · '))),
+            h('td', h('b', a.title), h('div.sub', a.parts.map(partText).join(' · '))),
             h('td', a.due ? `son gün ${fmtDate(a.due)}` : ''),
             h('td', h('div.mini-progress', h('span', { style: { width: pct(a.pct) } }), h('b', pct(a.pct)))))))) : null,
         h('div.two-col',
@@ -295,8 +295,11 @@ export default {
         if (f.exam.on && !pkg.exam) { toast('Sınava soru eklenemedi: bulmaca, oyun ya da repertuvar seçin', 'error'); return; }
         const noAnalysis = pkg.gtm.games.length - Object.keys(pkg.gtm.analysis).length;
         if (window.webHooks) {
-          if (!(await window.webHooks.sendPackage(pkg))) return;
+          const ctx = window.__lessonCtx;
+          if (ctx) pkg.lesson = ctx.ref;
+          if (!(await window.webHooks.sendPackage(pkg, ctx ? ctx.studentIds : null))) return;
           await sentPackages.add(pkg);
+          if (ctx) { window.__lessonCtx = null; window.goTo('program'); return; }
           showPackage();
           return;
         }
@@ -340,7 +343,16 @@ export default {
       refresh();
     }
 
-    showStudents();
+    if (window.__lessonCtx) { showPackage(); lessonBanner(); } else showStudents();
+
+    // Assignment started from a lesson card in Program: show which lesson it will be linked to.
+    function lessonBanner() {
+      const ctx = window.__lessonCtx;
+      if (!ctx) return;
+      body.prepend(h('div.panel.lesson-banner', h('div', '📅 Bu ödev şu derse bağlanacak: ', h('b', ctx.label),
+        h('div.muted.small', 'Gönderirken dersin öğrencileri seçili gelir. Sonuçları bir sonraki dersin kartında görürsün.')),
+        h('button.btn.small.ghost', { onclick: (e) => { window.__lessonCtx = null; e.target.closest('.lesson-banner').remove(); } }, 'Bağlantıyı kaldır')));
+    }
     return { unmount: () => {} };
   },
 };

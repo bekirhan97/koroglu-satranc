@@ -2,7 +2,7 @@
 // The desktop teacher module calls these through window.webHooks.
 import { supa, hesap, cleanUsername } from './supa.js';
 import { h, clear, modal, toast, fmtDate } from '../../src/renderer/core/dom.js';
-import { students, packageSummary } from '../../src/renderer/core/assign.js';
+import { students, packageSummary, partText } from '../../src/renderer/core/assign.js';
 import { videoStore } from './videos.js';
 import { rankingView } from './ranking.js';
 
@@ -132,7 +132,7 @@ export function accountsHooks(me) {
         const details = h('div.asg-detail', { style: { display: 'none' } },
           h('table.kv.asg-students', rows.map((r) => h('tr',
             h('td', h('b', r.name), r.group ? h('span.muted.small', ` · ${r.group}`) : null),
-            h('td', r.pr ? r.pr.parts.map((p) => `${p.done}/${p.total} ${p.label}`).join(' · ') : h('span.muted', r.seen ? '' : 'henüz açmadı')),
+            h('td', r.pr ? r.pr.parts.map(partText).join(' · ') : h('span.muted', r.seen ? '' : 'henüz açmadı')),
             h('td', h('div.mini-progress', h('span', { style: { width: `${Math.round(100 * (r.pr ? r.pr.pct : 0))}%` } }), h('b', `%${Math.round(100 * (r.pr ? r.pr.pct : 0))}`)))))));
         return h('div.panel.asg-card',
           h('div.asg-card-head',
@@ -216,11 +216,11 @@ export function accountsHooks(me) {
     },
 
     // Called by the package builder instead of saving a .kpaket file.
-    async sendPackage(pkg) {
+    async sendPackage(pkg, preselect) {
       let list;
       try { list = await myStudents(); } catch (e) { toast('Öğrenciler alınamadı: ' + e.message, 'error'); return false; }
       if (!list.length) { toast('Önce "Hesaplar" sekmesinden öğrenci hesabı açın.', 'error'); return false; }
-      const chosen = new Set();
+      const chosen = new Set((preselect || []).filter((id) => list.some((s) => s.id === id)));
       const groups = [...new Set(list.map((s) => s.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
       const boxes = new Map();
       const count = h('b', '0');
@@ -239,6 +239,7 @@ export function accountsHooks(me) {
           return h('label.pick', cb, h('span', s.display_name), h('span.muted.small', ' · ' + classOf(s)));
         })),
         h('p.muted.small', 'Seçilen öğrenci: ', count));
+      sync();
       return new Promise((resolve) => modal({
         title: `"${pkg.title}" kime gitsin?`, body, wide: true, onClose: () => resolve(false),
         actions: [{ label: 'Vazgeç', onClick: () => resolve(false) }, { label: 'Gönder', primary: true, onClick: () => {
