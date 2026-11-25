@@ -1,6 +1,6 @@
 {
   "name": "koroglu-satranc",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Köroğlu Satranç çalışma uygulaması",
   "main": "src/main/main.cjs",
   "scripts": {
