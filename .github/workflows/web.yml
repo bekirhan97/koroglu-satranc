@@ -3,7 +3,7 @@ name: Web (Öğrenci Sistemi)
 on:
   push:
     branches: [main]
-    paths: ['web/**', 'src/renderer/**', 'resources/puzzles.json', 'scripts/build-web.mjs', 'package.json', '.github/workflows/web.yml']
+    paths: ['web/**', 'src/renderer/**', 'resources/puzzles.json', 'scripts/build-web.mjs', 'test/**', 'package.json', '.github/workflows/web.yml']
   workflow_dispatch:
 permissions:
   contents: read
