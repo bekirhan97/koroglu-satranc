@@ -7,7 +7,9 @@ const backup = require('./backup.cjs');
 const updater = require('./updater.cjs');
 
 const isDev = !app.isPackaged;
+// The data folder keeps its 0.2 name ("Köroğlu Satranç") whatever the package or bundle is called.
 if (process.env.KOROGLU_DATA_DIR) app.setPath('userData', process.env.KOROGLU_DATA_DIR);
+else app.setPath('userData', path.join(app.getPath('appData'), 'Köroğlu Satranç'));
 const resRoot = isDev ? path.join(__dirname, '..', '..', 'resources') : process.resourcesPath;
 log.init(path.join(app.getPath('userData'), 'logs'));
 process.on('uncaughtException', (e) => log.error('Ana süreç hatası:', e));

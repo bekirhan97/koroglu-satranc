@@ -8,7 +8,7 @@
     "build": "node scripts/build.mjs",
     "start": "node scripts/build.mjs && electron .",
     "dist:win": "node scripts/build.mjs --minify && electron-builder --win --x64",
-    "dist:mac": "node scripts/build.mjs --minify && electron-builder --mac --arm64 --x64"
+    "dist:mac": "node scripts/build.mjs --minify && electron-builder --mac --arm64 --x64 -c.productName=\"Koroglu Satranc\""
   },
   "keywords": [],
   "author": {
@@ -132,7 +132,8 @@
       "language": "1055",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,
-      "license": "build-src/LISANS.txt"
+      "license": "build-src/LISANS.txt",
+      "uninstallDisplayName": "Köroğlu Satranç"
     },
     "mac": {
       "target": [
@@ -149,7 +150,11 @@
       "identity": "-",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "artifactName": "KorogluSatranc-${version}-Mac-${arch}.${ext}"
+      "artifactName": "KorogluSatranc-${version}-Mac-${arch}.${ext}",
+      "extendInfo": {
+        "CFBundleDisplayName": "Köroğlu Satranç",
+        "CFBundleName": "Köroğlu Satranç"
+      }
     },
     "linux": {
       "target": [

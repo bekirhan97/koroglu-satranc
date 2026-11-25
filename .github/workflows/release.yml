@@ -111,7 +111,7 @@ jobs:
         run: |
           node scripts/build.mjs --minify
           rm -f dist/*.map
-          npx electron-builder --mac --arm64 --x64 --publish never
+          npx electron-builder --mac --arm64 --x64 --publish never -c.productName="Koroglu Satranc"
       - name: Öz test (Apple Silicon)
         run: |
           run_for() { local t=$1; shift; "$@" & local pid=$!; for i in $(seq "$t"); do kill -0 $pid 2>/dev/null || break; sleep 1; done; kill $pid 2>/dev/null || true; wait $pid 2>/dev/null; echo "çıkış kodu $?"; }
@@ -119,7 +119,7 @@ jobs:
           { echo "== codesign"; codesign --verify --deep --verbose=2 "$APP" 2>&1; codesign -dv "$APP" 2>&1; echo "== ls"; ls -la "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Resources/engines"/* 2>&1; } > "$RUNNER_TEMP/codesign.txt" 2>&1 || true
           xattr -cr "$APP"
           BIN="$(ls "$APP/Contents/MacOS/" | head -1)"
-          KOROGLU_DATA_DIR="$RUNNER_TEMP/kdata" KOROGLU_SELFTEST="$RUNNER_TEMP/selftest.json" run_for 180 "$APP/Contents/MacOS/$BIN" > "$RUNNER_TEMP/stdout.txt" 2>&1
+          KOROGLU_DATA_DIR="$RUNNER_TEMP/kdata" KOROGLU_SELFTEST="$RUNNER_TEMP/selftest.json" ELECTRON_ENABLE_LOGGING=1 run_for 180 "$APP/Contents/MacOS/$BIN" > "$RUNNER_TEMP/stdout.txt" 2>&1
           cat "$RUNNER_TEMP/selftest.json"
           node -e "process.exit(require(process.env.RUNNER_TEMP + '/selftest.json').ok ? 0 : 1)"
       - name: Tanı bilgisini yükle (hata olursa)
@@ -128,7 +128,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           D="$RUNNER_TEMP/tani-mac.txt"
-          for f in codesign.txt stdout.txt selftest.json kdata/logs/koroglu.log; do echo "===== $f"; cat "$RUNNER_TEMP/$f" 2>&1 || true; done > "$D"
+          { for f in codesign.txt stdout.txt selftest.json kdata/logs/koroglu.log; do echo "===== $f"; cat "$RUNNER_TEMP/$f" 2>&1 || true; done
+            echo "===== çöküş raporları"; for r in $(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -2); do echo "--- $r"; head -c 12000 "$r"; done; } > "$D"
           gh release upload "$TAG" "$D" --clobber
       - name: Öz test (Intel, Rosetta ile)
         continue-on-error: true
