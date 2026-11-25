@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { parsePgnTree } from './pgntree.js';
 
 // Split a multi-game PGN file into single-game strings.
 export function splitPgn(text) {
@@ -23,6 +24,31 @@ function hash(str) {
 }
 
 // Parse one game. Returns null if it has no moves or fails to parse.
+// Alternatives (RAV) to each mainline move: variations[p] = [{ ucis, sans, label, comment }] for move p.
+// Each variation follows its first-choice chain, at most 16 plies; nested side lines are left out.
+export function extractVariations(pgnText, ucis) {
+  let roots;
+  try { ({ roots } = parsePgnTree(pgnText)); } catch { return {}; }
+  if (!roots || !roots.length) return {};
+  const out = {};
+  let node = roots[0];
+  for (let p = 0; p < ucis.length && node; p++) {
+    const main = node.children.find((c) => c.uci === ucis[p]);
+    const alts = node.children.filter((c) => c !== main);
+    if (alts.length) {
+      out[p] = alts.slice(0, 4).map((alt) => {
+        const line = [];
+        const comments = [];
+        for (let n = alt; n && line.length < 16; n = n.children[0]) { line.push(n); if (n.comment) comments.push(n.comment); }
+        const label = line.map((n, i) => { const f = n.parent.fen.split(' '); const num = f[5]; return (f[1] === 'w' ? `${num}.` : i === 0 ? `${num}...` : '') + n.san; }).join(' ');
+        return { ucis: line.map((n) => n.uci), sans: line.map((n) => n.san), label, comment: comments.join(' ').slice(0, 300) };
+      });
+    }
+    node = main;
+  }
+  return out;
+}
+
 export function parseGame(pgnText, collection) {
   const chess = new Chess();
   try { chess.loadPgn(pgnText); } catch (e) { return { error: e.message }; }
@@ -61,6 +87,7 @@ export function parseGame(pgnText, collection) {
     sans,
     ucis,
     comments,
+    variations: extractVariations(pgnText, ucis),
     userColor,
     addedAt: Date.now(),
   };

@@ -440,3 +440,14 @@ table.kv.asg td:last-child { width: 160px; }
 .pkg-main .form-l { display: block; margin: 12px 0 4px; font-weight: 600; }
 .pkg-main .panel > .form-l:first-of-type { margin-top: 0; }
 .toolbar .btn { white-space: nowrap; }
+
+/* ---------- 0.4: GTM variations ---------- */
+.rv-vars { margin: 2px 0 6px 18px; display: flex; flex-direction: column; gap: 3px; }
+.rv-var { font-size: 13px; color: #3d4a6b; cursor: pointer; padding: 2px 6px; border-left: 2px solid var(--gold); border-radius: 3px; }
+.rv-var:hover { background: #faf5ea; }
+.rv-var-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; background: var(--gold); color: #1b1208; padding: 1px 5px; border-radius: 3px; }
+.rv-var .comment { margin: 0; display: inline; }
+.asg-part.lichess { border-color: var(--gold-2); background: #faf5ea; }
+.theme-row input.link-title { width: 200px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; }
+.theme-row input.link-url { flex: 1; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; }
+.theme-row input.bad { border-color: var(--bad); background: #fbefed; }

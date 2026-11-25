@@ -2,7 +2,7 @@
 import { h, clear, modal, toast, fmtDate } from '../../core/dom.js';
 import { store } from '../../core/store.js';
 import { ratingChart } from '../../core/charts.js';
-import { students, sentPackages, buildPackage, packageSummary } from '../../core/assign.js';
+import { students, sentPackages, buildPackage, packageSummary, isLichessUrl } from '../../core/assign.js';
 import { GOAL_KINDS } from '../../core/activity.js';
 import { pdata } from '../puzzles/data.js';
 import { odata } from '../openings/data.js';
@@ -135,14 +135,15 @@ export default {
     // ---------- package builder ----------
     function showPackage() {
       setTabs('package');
-      const f = { title: '', note: '', due: '', goal: { puzzles: 10, openings: 0, gtmGames: 0, playGames: 0 }, games: new Set(), sets: new Set(), reps: new Set(), themeSets: [] };
+      const f = { title: '', note: '', due: '', goal: { puzzles: 10, openings: 0, gtmGames: 0, playGames: 0 }, games: new Set(), sets: new Set(), reps: new Set(), themeSets: [], links: [] };
       const summary = h('div.pkg-summary');
       const refresh = () => {
         const nGames = f.games.size;
         const nPz = pdata.sets.filter((s) => f.sets.has(s.id)).reduce((a, s) => a + s.puzzles.length, 0) + f.themeSets.reduce((a, t) => a + t.count, 0);
         clear(summary).append(h('div.panel-title', 'Paket özeti'),
           h('ul', nGames ? h('li', `${nGames} Tahmin Et oyunu`) : null, nPz ? h('li', `${nPz} bulmaca`) : null, f.reps.size ? h('li', `${f.reps.size} açılış repertuvarı`) : null,
-            !nGames && !nPz && !f.reps.size ? h('li.muted', 'Henüz içerik seçilmedi') : null),
+            f.links.length ? h('li', `${f.links.length} Lichess bağlantısı`) : null,
+            !nGames && !nPz && !f.reps.size && !f.links.length ? h('li.muted', 'Henüz içerik seçilmedi') : null),
           h('button.btn.primary.big', { onclick: save }, 'Paketi kaydet…'),
           h('p.muted.small', 'Kaydettiğiniz .kpaket dosyasını öğrencilerinize WhatsApp, e-posta ya da USB ile gönderin. Öğrenci dosyaya çift tıklayınca ödev uygulamasına eklenir.'));
       };
@@ -166,16 +167,23 @@ export default {
         h('input', { type: 'number', step: 50, value: t.max, onchange: (e) => { t.max = +e.target.value; } }), h('span.muted', 'puan'),
         h('button.icon-btn', { title: 'Kaldır', onclick: () => { f.themeSets.splice(i, 1); drawThemes(); refresh(); } }, '✕'))));
 
+      const linkRows = h('div.theme-rows');
+      const drawLinks = () => clear(linkRows).append(...f.links.map((l, i) => h('div.theme-row',
+        h('input.link-title', { value: l.title, placeholder: 'Başlık', oninput: (e) => { l.title = e.target.value; } }),
+        h('input.link-url', { value: l.url, placeholder: 'https://lichess.org/tournament/…', oninput: (e) => { l.url = e.target.value.trim(); e.target.classList.toggle('bad', !!l.url && !isLichessUrl(l.url)); } }),
+        h('button.icon-btn', { title: 'Kaldır', onclick: () => { f.links.splice(i, 1); drawLinks(); refresh(); } }, '✕'))));
+
       const num = (k) => h('input.goal-in', { type: 'number', min: 0, max: 200, value: f.goal[k], onchange: (e) => { f.goal[k] = Math.max(0, +e.target.value || 0); } });
 
       async function save() {
         const title = f.title.trim();
         if (!title) { toast('Pakete bir başlık verin', 'error'); return; }
-        if (!f.games.size && !f.sets.size && !f.themeSets.length && !f.reps.size) { toast('Pakete en az bir içerik ekleyin', 'error'); return; }
+        if (f.links.some((l) => !isLichessUrl(l.url))) { toast('Lichess bağlantıları https://lichess.org/ ile başlamalı', 'error'); return; }
+        if (!f.games.size && !f.sets.size && !f.themeSets.length && !f.reps.size && !f.links.length) { toast('Pakete en az bir içerik ekleyin', 'error'); return; }
         const due = f.due ? new Date(f.due + 'T23:59:59').getTime() : null;
         const goal = Object.values(f.goal).some((v) => v > 0) ? { ...f.goal } : null;
         toast('Paket hazırlanıyor…');
-        const pkg = await buildPackage({ title, note: f.note.trim(), due, goal, gtmGameIds: [...f.games], setIds: [...f.sets], themeSets: f.themeSets, repIds: [...f.reps] });
+        const pkg = await buildPackage({ title, note: f.note.trim(), due, goal, gtmGameIds: [...f.games], setIds: [...f.sets], themeSets: f.themeSets, repIds: [...f.reps], links: f.links });
         const noAnalysis = pkg.gtm.games.length - Object.keys(pkg.gtm.analysis).length;
         const path = await api.saveFile('paket', title.replace(/[\\/:*?"<>|]/g, '-'), pkg);
         if (!path) return;
@@ -204,7 +212,11 @@ export default {
             themeRows,
             h('button.btn.small', { onclick: () => { f.themeSets.push({ theme: 'fork', name: 'Çatal seçkisi', count: 15, min: 1000, max: 1600 }); drawThemes(); refresh(); } }, '+ Tema seçkisi ekle')),
           h('div.panel', h('div.panel-title', '5. Açılış repertuvarları'),
-            odata.reps.filter((r) => !r.assignment).length ? h('div.pick-list', odata.reps.filter((r) => !r.assignment).map((r) => check(f.reps, r.id, r.name, `${r.color === 'w' ? 'Beyaz' : 'Siyah'} · ${r.lines} çizgi`))) : h('div.muted.small', 'Repertuvarınız yok (Açılış Tekrarı → Repertuvar İçe Aktar).'))),
+            odata.reps.filter((r) => !r.assignment).length ? h('div.pick-list', odata.reps.filter((r) => !r.assignment).map((r) => check(f.reps, r.id, r.name, `${r.color === 'w' ? 'Beyaz' : 'Siyah'} · ${r.lines} çizgi`))) : h('div.muted.small', 'Repertuvarınız yok (Açılış Tekrarı → Repertuvar İçe Aktar).')),
+          h('div.panel', h('div.panel-title', '6. Lichess turnuvası / takımı'),
+            h('p.muted.small', 'Hafta sonu turnuvası, takım ya da çalışma (study) bağlantısı ekleyin. Öğrenci ödevin içinden tek tıkla açar.'),
+            linkRows,
+            h('button.btn.small', { onclick: () => { f.links.push({ title: 'Hafta sonu turnuvası', url: '' }); drawLinks(); refresh(); } }, '+ Bağlantı ekle'))),
         h('div.pkg-side', h('div.panel', summary),
           sentPackages.list.length ? h('div.panel', h('div.panel-title', 'Gönderilen paketler'),
             h('table.kv', sentPackages.list.slice().reverse().slice(0, 10).map((p) => h('tr', h('td', h('b', p.title), h('div.sub', p.summary.join(' · '))), h('td', fmtDate(p.createdAt)))))) : null)));

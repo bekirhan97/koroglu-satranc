@@ -42,7 +42,9 @@ export const assignments = {
  * @param {object[]} p.themeSets   [{ theme, count, min, max, name }] → concrete Lichess puzzles picked now
  * @param {string[]} p.repIds      teacher's opening repertoires
  */
-export async function buildPackage({ title, note = '', due = null, goal = null, gtmGameIds = [], setIds = [], themeSets = [], repIds = [] }) {
+export const isLichessUrl = (u) => /^https:\/\/lichess\.org\/[\w\-/#?=&.]+$/.test(String(u || '').trim());
+
+export async function buildPackage({ title, note = '', due = null, goal = null, gtmGameIds = [], setIds = [], themeSets = [], repIds = [], links = [], exam = null }) {
   const games = store.games.filter((g) => gtmGameIds.includes(g.id));
   const analysis = {};
   for (const g of games) { const a = await store.loadAnalysis(g.id); if (a && Object.keys(a.plies || {}).length) analysis[g.id] = a; }
@@ -71,6 +73,8 @@ export async function buildPackage({ title, note = '', due = null, goal = null, 
     format: 'koroglu-paket', v: PACKAGE_VERSION, id: uid(), title, note, due, goal,
     teacher: store.profile.name, createdAt: Date.now(),
     gtm: { games, analysis }, sets, reps,
+    links: links.filter((l) => isLichessUrl(l.url)).map((l) => ({ title: String(l.title || 'Lichess turnuvası').slice(0, 80), url: l.url.trim() })),
+    exam,
   };
 }
 
@@ -80,6 +84,8 @@ export function packageSummary(pkg) {
   const pz = (pkg.sets || []).reduce((a, s) => a + s.puzzles.length, 0);
   if (pz) parts.push(`${pz} bulmaca (${pkg.sets.length} set)`);
   if (pkg.reps && pkg.reps.length) parts.push(`${pkg.reps.length} açılış repertuvarı`);
+  if (pkg.links && pkg.links.length) parts.push(`${pkg.links.length} Lichess bağlantısı`);
+  if (pkg.exam) parts.push(`Sınav: ${pkg.exam.title || 'sınav'}`);
   return parts;
 }
 
@@ -125,7 +131,8 @@ export async function importPackage(pkg) {
   }
   if (items.reps.length) await odata.saveIndex();
 
-  assignments.list.push({ id: pkg.id, title: pkg.title, teacher: pkg.teacher, note: pkg.note || '', due: pkg.due || null, goal: pkg.goal || null, createdAt: pkg.createdAt, receivedAt: Date.now(), items });
+  const links = (pkg.links || []).filter((l) => isLichessUrl(l.url));
+  assignments.list.push({ id: pkg.id, title: pkg.title, teacher: pkg.teacher, note: pkg.note || '', due: pkg.due || null, goal: pkg.goal || null, createdAt: pkg.createdAt, receivedAt: Date.now(), items, links });
   await assignments.save();
   return { duplicate: false, items };
 }

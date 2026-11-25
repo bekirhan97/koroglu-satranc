@@ -91,3 +91,13 @@ test('öğretmen raporu Öğrencilerim\'e ekler; eski rapor yenisini ezmez', asy
   assert.equal(s.last.ratings.puzzles.r, 1700);
   assert.throws(() => students.add({ format: 'x' }), /raporu değil/);
 });
+
+test('Lichess bağlantıları: yalnızca lichess.org adresleri pakete girer', async () => {
+  await resetAs('Hoca');
+  const p = await buildPackage({ title: 'Turnuva', links: [{ title: 'Cumartesi', url: 'https://lichess.org/tournament/abc123' }, { title: 'Kötü', url: 'https://kotu.example/x' }] });
+  assert.equal(p.links.length, 1);
+  assert.deepEqual(packageSummary(p), ['1 Lichess bağlantısı']);
+  await resetAs('Ali');
+  await importPackage(JSON.parse(JSON.stringify({ ...p, links: [...p.links, { title: 'x', url: 'javascript:alert(1)' }] })));
+  assert.deepEqual(assignments.list[0].links.map((l) => l.title), ['Cumartesi']);
+});

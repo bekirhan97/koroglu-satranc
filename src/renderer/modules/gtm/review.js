@@ -107,6 +107,9 @@ export class ReviewView {
             `${r.who.join('/')}: ${fmtEval(whiteCp(r.cp, color))} `, h('span.muted', `(derinlik ${r.depth || (e && e.depth) || '?'})`), ' ',
             h('b', san(uciToSan(fen, r.uci)))))));
       }
+      const vars = this.game.variations && this.game.variations[p];
+      if (vars) host.append(h('div.rv-vars', vars.map((v) => h('div.rv-var', { title: 'Tahtada göster', onclick: (ev) => { ev.stopPropagation(); this.go(p); this.showLine(p, v.ucis); } },
+        h('span.rv-var-tag', 'Varyant'), ' ', v.label, v.comment ? h('span.comment', ' ' + v.comment) : null))));
       if (this.game.comments[p + 1]) host.append(h('div.comment', this.game.comments[p + 1]));
     }
   }
@@ -115,6 +118,15 @@ export class ReviewView {
     const plies = Object.keys(this.att.moves).map(Number).sort((a, b) => a - b);
     const target = dir > 0 ? plies.find((p) => p > this.idx) : plies.reverse().find((p) => p < this.idx);
     if (target != null) this.go(target);
+  }
+
+  // Play a variation from the position before move p and show where it ends.
+  showLine(p, ucis) {
+    const c = new Chess(this.fens[p]);
+    let last = null;
+    for (const u of ucis) { try { c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] || 'q' }); last = u; } catch { break; } }
+    this.board.setPosition(c.fen(), { lastMove: last });
+    this.board.setArrows([]);
   }
 
   // Show what a candidate move leads to (one move ahead) with its arrow.

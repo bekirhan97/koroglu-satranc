@@ -105,7 +105,8 @@ async function renderAssignments(host) {
       h('div.asg-main', h('div.asg-title', a.title, pr.complete ? h('span.chip.ok', 'Tamamlandı') : null),
         h('div.muted.small', [a.teacher ? `${a.teacher}` : null, dueTxt].filter(Boolean).join(' · ')),
         a.note ? h('div.asg-note', a.note) : null,
-        h('div.asg-parts', pr.parts.map((x) => h('button.asg-part', { onclick: () => go(x.kind === 'gtm' ? 'gtm' : x.kind === 'sets' ? 'puzzles' : 'openings') }, `${x.done}/${x.total} ${x.label}`)))),
+        h('div.asg-parts', pr.parts.map((x) => h('button.asg-part', { onclick: () => go(x.kind === 'gtm' ? 'gtm' : x.kind === 'sets' ? 'puzzles' : 'openings') }, `${x.done}/${x.total} ${x.label}`)),
+          (a.links || []).map((l) => h('button.asg-part.lichess', { title: l.url, onclick: () => window.api.openExternal(l.url) }, '♞ ', l.title, ' ↗')))),
       h('div.asg-pct', h('div.ring', { style: { '--p': Math.round(100 * pr.pct) } }, h('span', `%${Math.round(100 * pr.pct)}`)))));
   }
   if (rows.length) clear(host).append(h('div.panel.asg-panel', h('div.panel-title', 'Ödevlerim'), rows));
