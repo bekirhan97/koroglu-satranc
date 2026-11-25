@@ -1,43 +1,38 @@
 # Köroğlu Satranç
 
-Modüler satranç çalışma uygulaması (Electron), sürüm 0.2. Modüller:
-- **Hamleyi Tahmin Et** (ChessTempo "Guess the Move" benzeri)
-- **Bulmacalar** (Lichess CC0 veritabanından 60.653 bulmaca + PGN setleri)
-- **Açılış Tekrarı** (varyantlı PGN repertuvar + aralıklı tekrar)
-- **Pozisyondan Oyna** (Stockfish 8 seviye + Maia 1100–1900, saf JavaScript)
+Köroğlu Satranç Akademi'nin çalışma uygulaması (Electron, Windows + macOS). Sürüm 0.3.
+
+**İndir:** [Son sürüm](https://github.com/bekirhan97/koroglu-satranc/releases/latest) – Windows için `…Windows-Setup.exe`, Mac için `…Mac-arm64.zip` (Apple Silicon) ya da `…Mac-x64.zip` (Intel).
+
+## Bölümler
+- **Hamleyi Tahmin Et** – usta oyunlarında hamle tahmini, ChessTempo benzeri puanlama
+- **Açılış Tekrarı** – varyantlı PGN repertuvar + aralıklı tekrar
+- **Bulmacalar** – Lichess'ten 60.653 bulmaca, tema analizi, kaçırılan bulmacaların tekrarı, PGN setleri
+- **Pozisyondan Oyna** – Stockfish (8 seviye) ya da Maia (1100–1900), satranç saati
+- **Öğretmen** (Ayarlar → Öğretmen modu) – ödev paketi (`.kpaket`) hazırlama, öğrenci raporlarını (`.krapor`) görme
+
+Veriler öğrencinin bilgisayarında JSON olarak durur (`userData/data`); her gün `userData/backups` altına otomatik yedek alınır.
 
 ## Geliştirme
 ```
-npm install
-# motorları resources/engines/<platform-arch>/ altına koyun (Stockfish 17.1, GitHub releases):
-#   win32-x64/stockfish.exe   (stockfish-windows-x86-64-sse41-popcnt)
-#   darwin-arm64/stockfish    (stockfish-macos-m1-apple-silicon)
-#   darwin-x64/stockfish      (stockfish-macos-x86-64-sse41-popcnt)
-#   linux-x64/stockfish       (geliştirme için)
-node scripts/build-openings.mjs <lichess chess-openings tsv klasörü> resources/openings.json
-python3 scripts/build-puzzles.py lichess_db_puzzle.csv.zst resources/puzzles.json 2500
-node scripts/build-maia.cjs <maia-chess/maia_weights> <lc0tables.json> resources/maia   # protobufjs gerekir
-npm start
+npm ci
+scripts/fetch-engines.sh linux-x64        # ya da win32-x64 / darwin-arm64 / darwin-x64
+npm start                                 # derle ve çalıştır
+npm test                                  # birim testleri
 ```
+Veri dosyalarını yeniden üretmek için: `scripts/build-puzzles.py`, `scripts/build-openings.mjs`, `scripts/build-maia.cjs`.
 
-## Paketleme
-```
-node scripts/build.mjs --minify && rm -f dist/*.map
-node scripts/package.mjs win32-x64
-scripts/package-mac.sh arm64 <electron-vX-darwin-arm64.zip> "out/Koroglu Satranc-win32-x64/resources/app.asar"
-scripts/package-mac.sh x64   <electron-vX-darwin-x64.zip>   "out/Koroglu Satranc-win32-x64/resources/app.asar"
-```
+## Sürüm çıkarma
+1. `package.json` içindeki `version` değerini artırın, `docs/surum-notlari/vX.Y.Z.md` dosyasını yazın.
+2. `release/vX.Y.Z` adlı bir dal gönderin (ya da GitHub'da Actions → Sürüm → Run workflow).
+3. İş akışı Windows ve Mac'te paketleri derler, her paketi kendi işletim sisteminde öz test modunda açar
+   (motor, Maia, bulmacalar, arayüz) ve GitHub sürümüne yükler. Windows kurulumları yeni sürümü kendiliğinden alır.
+
+Öz test: `KOROGLU_SELFTEST=sonuc.json` ortam değişkeniyle açılan uygulama kontrolleri yapıp kapanır.
 
 ## Yapı
-- `src/main/` – Electron ana süreç: pencere, JSON veri deposu (userData/data), UCI motor yöneticisi (öncelikli iş kuyruğu).
-- `src/renderer/core/` – ortak parçalar: tahta (chessground + chess.js), PGN, açılış kitabı, motor istemcisi, Glicko.
-- `src/renderer/modules/` – her çalışma alanı bir modül. `registry.js`'e eklenir.
-  - `gtm/` – Hamleyi Tahmin Et: `scoring.js` (0–12 puanlama, ChessTempo verisine kalibre), `analysis.js`
-    (hamle başına motor analizi, diske önbellek), `play.js`, `review.js`, `list.js`, `stats.js`.
+- `src/main/` – ana süreç: pencere, JSON deposu, UCI motor yöneticisi, yedekleme (`backup.cjs`), kayıt (`log.cjs`), güncelleme (`updater.cjs`)
+- `src/renderer/core/` – ortak parçalar: tahta, PGN, motor, Glicko, aralıklı tekrar (`srs.js`), çalışma günlüğü (`activity.js`), ödev/rapor (`assign.js`)
+- `src/renderer/modules/<id>/` – her bölüm bir modül; `registry.js`'de listelenir
 
-## Yeni modül eklemek
-`modules/<id>/index.js` dosyası `{ id, title, icon, description, ready: true, mount(root, ctx) }` döndürür;
-`mount` bir `{ unmount }` nesnesi verir. Tahta için `core/board.js`, motor için `core/engine.js` kullanılır.
-Profil puanları `store.profile.ratings.<modül>` altında tutulur.
-
-Lisans: GPL-3.0-or-later (Stockfish ve chessground GPL-3).
+Lisans: GPL-3.0-or-later (Stockfish, chessground, Maia GPL-3). Lichess bulmacaları ve açılış isimleri CC0.
