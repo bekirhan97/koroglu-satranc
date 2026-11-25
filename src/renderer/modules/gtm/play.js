@@ -9,6 +9,7 @@ import { GameAnalysis } from './analysis.js';
 import { scoreMove, scoreClass } from './scoring.js';
 import { newAttempt, activeAttempt, rateMove, attemptStats } from './session.js';
 import { updateDifficulty } from './list.js';
+import { activity } from '../../core/activity.js';
 import { statsPanel, feedbackBox, playerBar, san, whiteCp, gameTitle } from './widgets.js';
 
 export class PlayView {
@@ -158,6 +159,7 @@ export class PlayView {
     const best = entry.top[0];
     const sc = scoreMove({ played: uci, playedCp: played.cp, master, masterCp: entry.master.cp, bestCp: best.cp, isBook: inBook(fenAfter) });
     const delta = rateMove(this.att, entry.rating, sc.score);
+    activity.add('gtmMoves');
     const move = {
       uci, san: moveSan, cp: played.cp, masterUci: master, masterCp: entry.master.cp,
       bestUci: best.uci, bestCp: best.cp, score: sc.score, type: sc.type, timeMs,
@@ -222,6 +224,7 @@ export class PlayView {
     this.state = 'done';
     this.att.status = 'done';
     this.att.finishedAt = Date.now();
+    activity.add('gtmGames');
     this.att.lastPly = this.n;
     store.saveAttempts();
     store.saveProfile();

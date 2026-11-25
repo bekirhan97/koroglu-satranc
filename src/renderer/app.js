@@ -7,6 +7,11 @@ import { store, newProfile } from './core/store.js';
 import { loadOpenings } from './core/openings.js';
 import { modules } from './modules/registry.js';
 import brandLogo from './assets/brand.png';
+import { activity, goalProgress, streak, GOAL_KINDS } from './core/activity.js';
+import { assignments, importPackage, assignmentProgress, buildReport, packageSummary } from './core/assign.js';
+import { importReports } from './modules/teacher/index.js';
+
+const visibleModules = () => modules.filter((m) => !m.teacherOnly || store.settings.teacherMode);
 
 const app = document.getElementById('app');
 let mounted = null;
@@ -19,7 +24,7 @@ function nav() {
     h('div.brand', h('img.brand-logo', { src: brandLogo, alt: '' }), h('div', h('div.brand-name', 'Köroğlu'), h('div.brand-sub', 'Satranç Akademi'))),
     item('home', '⌂', 'Ana Sayfa'),
     h('div.nav-sep', 'Çalışma'),
-    modules.map((m) => item(m.id, m.icon, m.title, m.ready ? null : h('span.soon', 'yakında'))),
+    visibleModules().map((m) => item(m.id, m.icon, m.title, m.ready ? null : h('span.soon', 'yakında'))),
     h('div.nav-fill'),
     item('settings', '⚙', 'Ayarlar'),
     h('div.profile-chip', store.profile ? store.profile.name : ''));
@@ -49,15 +54,117 @@ function go(id) {
   else mounted = res;
 }
 
-function renderHome(root) {
+async function renderHome(root) {
   const p = store.profile;
+  await Promise.all([activity.load(), assignments.load()]);
+  const today = h('div.today');
+  const asgHost = h('div.asg-host');
   root.append(h('div.home',
-    h('div.hero', h('h1', `Hoş geldin, ${p.name}`), h('p.muted', 'Bugün ne çalışmak istersin?')),
-    h('div.module-grid', modules.map((m) => h('button.module-card' + (m.ready ? '' : '.disabled'), { onclick: () => go(m.id) },
+    h('div.hero', h('div', h('h1', `Hoş geldin, ${p.name}`), h('p.muted', 'Bugün ne çalışmak istersin?')),
+      h('div.hero-actions',
+        h('button.btn', { onclick: () => openPackageFiles() }, 'Ödev paketi aç…'),
+        h('button.btn.primary', { onclick: () => sendReport() }, 'Rapor gönder'))),
+    today,
+    asgHost,
+    h('div.module-grid', visibleModules().map((m) => h('button.module-card' + (m.ready ? '' : '.disabled'), { onclick: () => go(m.id) },
       h('div.mc-icon', m.icon),
       h('div.mc-title', m.title, m.ready ? null : h('span.soon', 'yakında')),
       h('div.mc-desc', m.description),
       m.homeInfo ? infoSlot(m) : null)))));
+  renderToday(today);
+  renderAssignments(asgHost);
+}
+
+function renderToday(host) {
+  const goal = assignments.goal();
+  const day = activity.day();
+  const gp = goalProgress(goal, day);
+  const st = streak(activity.days, goal);
+  const fire = h('div.streak' + (st.todayDone ? '.done' : ''), h('div.streak-n', st.current), h('div.streak-l', st.current === 1 ? 'günlük seri' : 'günlük seri'),
+    h('div.muted.small', st.todayDone ? 'Bugün tamam ✓' : st.current ? 'Seriyi bugün de sürdür' : 'Bugün başla'));
+  const goalBox = gp
+    ? h('div.goal-box', h('div.goal-title', gp.met ? '🎯 Bugünün hedefi tamamlandı!' : '🎯 Bugünün hedefi', goal.from === 'teacher' ? h('span.muted.small', ` · ${goal.teacher || 'öğretmen'} belirledi`) : null),
+      gp.items.map((i) => h('div.goal-item' + (i.done >= i.target ? '.met' : ''),
+        h('span.gi-label', i.label), h('span.gi-track', h('span', { style: { width: `${(100 * i.done) / i.target}%` } })), h('span.gi-num', `${i.raw}/${i.target}`))))
+    : h('div.goal-box.empty-goal', h('div.goal-title', '🎯 Günlük hedef yok'),
+      h('p.muted.small', 'Öğretmeniniz ödev paketiyle bir hedef gönderebilir ya da Ayarlar\'dan kendiniz belirleyebilirsiniz.'),
+      h('button.btn.small', { onclick: () => go('settings') }, 'Hedef belirle'),
+      h('div.muted.small', `Bugün: ${(day.puzzles || 0) + (day.reviews || 0)} bulmaca, ${day.openings || 0} açılış pozisyonu, ${day.gtmMoves || 0} tahmin`));
+  clear(host).append(fire, goalBox);
+}
+
+async function renderAssignments(host) {
+  const list = assignments.list.slice().sort((a, b) => (a.due || 9e15) - (b.due || 9e15));
+  if (!list.length) return;
+  const rows = [];
+  for (const a of list) {
+    const pr = await assignmentProgress(a);
+    if (pr.complete && a.due && Date.now() - a.due > 14 * 86400e3) continue; // finished long ago: hide
+    const dueTxt = a.due ? (pr.overdue ? `süresi geçti (${fmtDate(a.due)})` : `son gün ${fmtDate(a.due)}`) : '';
+    rows.push(h('div.asg' + (pr.complete ? '.complete' : pr.overdue ? '.overdue' : ''),
+      h('div.asg-main', h('div.asg-title', a.title, pr.complete ? h('span.chip.ok', 'Tamamlandı') : null),
+        h('div.muted.small', [a.teacher ? `${a.teacher}` : null, dueTxt].filter(Boolean).join(' · ')),
+        a.note ? h('div.asg-note', a.note) : null,
+        h('div.asg-parts', pr.parts.map((x) => h('button.asg-part', { onclick: () => go(x.kind === 'gtm' ? 'gtm' : x.kind === 'sets' ? 'puzzles' : 'openings') }, `${x.done}/${x.total} ${x.label}`)))),
+      h('div.asg-pct', h('div.ring', { style: { '--p': Math.round(100 * pr.pct) } }, h('span', `%${Math.round(100 * pr.pct)}`)))));
+  }
+  if (rows.length) clear(host).append(h('div.panel.asg-panel', h('div.panel-title', 'Ödevlerim'), rows));
+}
+
+async function sendReport() {
+  toast('Rapor hazırlanıyor…');
+  const r = await buildReport();
+  const d = new Date();
+  const name = `${store.profile.name} - rapor ${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`.replace(/[\\/:*?"<>|]/g, '-');
+  const path = await window.api.saveFile('rapor', name, r);
+  if (path) modal({ title: 'Rapor kaydedildi', body: h('div', h('p', 'Bu dosyayı öğretmeninize WhatsApp, e-posta ya da USB ile gönderin:'), h('p', h('b', path.split(/[\\/]/).pop())), h('p.muted.small', path),
+    h('p.muted.small', 'Raporda puanlarınız, çalıştığınız günler, tema analizi ve ödev ilerlemeniz bulunur.')), actions: [{ label: 'Tamam', primary: true }] });
+}
+
+async function openPackageFiles() {
+  const files = await window.api.openFiles('paket');
+  for (const f of files) await handleFile(f);
+}
+
+// A .kpaket or .krapor arrived (double-click, "open with" or the buttons).
+async function handleFile(f) {
+  if (f.error) { toast(`${f.name}: ${f.error}`, 'error'); return; }
+  if (f.kind === 'rapor') {
+    if (!store.settings.teacherMode) {
+      modal({ title: 'İlerleme raporu', body: h('div', h('p', `"${f.name}" bir öğrenci ilerleme raporu.`), h('p', 'Raporları görmek için Ayarlar\'dan öğretmen modunu açın.')),
+        actions: [{ label: 'Vazgeç' }, { label: 'Öğretmen modunu aç ve ekle', primary: true, onClick: async () => { store.settings.teacherMode = true; await store.saveSettings(); await importReports([f]); go('teacher'); } }] });
+      return;
+    }
+    await importReports([f]);
+    go('teacher');
+    return;
+  }
+  const pkg = f.data;
+  await assignments.load();
+  if (assignments.list.some((a) => a.id === pkg.id)) { toast(`"${pkg.title}" paketi zaten eklenmiş`); return; }
+  await new Promise((resolve) => modal({
+    title: 'Yeni ödev paketi',
+    onClose: resolve,
+    body: h('div.pkg-preview',
+      h('h3', pkg.title), h('div.muted', [pkg.teacher, pkg.createdAt ? fmtDate(pkg.createdAt) : null].filter(Boolean).join(' · ')),
+      pkg.note ? h('p.asg-note', pkg.note) : null,
+      h('ul', packageSummary(pkg).map((x) => h('li', x))),
+      pkg.due ? h('p', 'Son teslim: ', h('b', fmtDate(pkg.due))) : null,
+      pkg.goal ? h('p', 'Günlük hedef: ', h('b', GOAL_KINDS.filter(([k]) => pkg.goal[k] > 0).map(([k, unit]) => `${pkg.goal[k]} ${unit}`).join(', '))) : null),
+    actions: [{ label: 'Vazgeç', onClick: () => resolve() }, { label: 'Ödevi ekle', primary: true, onClick: async () => {
+      try {
+        const r = await importPackage(pkg);
+        toast(r.duplicate ? 'Bu paket zaten eklenmiş' : `"${pkg.title}" eklendi`, 'ok');
+        if (activeId === 'home') go('home');
+      } catch (e) { toast('Paket eklenemedi: ' + e.message, 'error'); }
+      resolve();
+    } }],
+  }));
+}
+
+async function takeWaitingFiles() {
+  const files = await window.api.takeFiles();
+  for (const f of files) await handleFile(f);
 }
 
 function infoSlot(m) {
@@ -76,12 +183,23 @@ async function renderSettings(root) {
   const row = (label, control, hint) => h('div.set-row', h('div', h('div.set-label', label), hint ? h('div.muted.small', hint) : null), control);
   const save = () => { store.saveSettings(); toast('Kaydedildi', 'ok'); };
   const backupList = h('div.backup-list');
+  await assignments.load();
+  const tg = assignments.goal();
+  const teacherGoal = tg && tg.from === 'teacher' ? tg : null;
   const updateBox = h('div.update-box');
   root.append(h('div.module', h('div.module-head', h('h2', 'Ayarlar')),
     h('div.settings',
       h('div.panel',
         h('div.panel-title', 'Profil'),
-        row('Ad', h('input', { value: store.profile.name, onchange: (e) => { store.profile.name = e.target.value.trim() || store.profile.name; store.saveProfile(); go('settings'); } }))),
+        row('Ad', h('input', { value: store.profile.name, onchange: (e) => { store.profile.name = e.target.value.trim() || store.profile.name; store.saveProfile(); go('settings'); } })),
+        row('Öğretmen modu', h('input', { type: 'checkbox', checked: !!s.teacherMode, onchange: async (e) => { s.teacherMode = e.target.checked; await store.saveSettings(); go('settings'); } }),
+          'Menüye "Öğretmen" bölümünü ekler: öğrencilere ödev paketi hazırlayın, gönderdikleri raporları görün.')),
+      h('div.panel',
+        h('div.panel-title', 'Günlük hedef'),
+        teacherGoal ? h('p.muted.small', `Şu an ${teacherGoal.teacher || 'öğretmeninizin'} ödev paketiyle belirlediği hedef geçerli. Aşağıdaki kendi hedefiniz, öğretmen hedefi olmadığında kullanılır.`)
+          : h('p.muted.small', 'Her gün yapmak istediğiniz çalışma. 0 bırakılanlar hedefe girmez. Hedefi tutturduğunuz her gün seriye eklenir.'),
+        h('div.goal-grid', GOAL_KINDS.map(([k, , label]) => h('label', h('input.goal-in', { type: 'number', min: 0, max: 200, value: (s.dailyGoal || {})[k] || 0,
+          onchange: (e) => { s.dailyGoal = { ...(s.dailyGoal || {}), [k]: Math.max(0, +e.target.value || 0) }; save(); } }), h('span', label))))),
       h('div.panel',
         h('div.panel-title', 'Hamleyi Tahmin Et'),
         row('Analiz derinliği', h('select', { onchange: (e) => { s.depth = +e.target.value; save(); } },
@@ -226,4 +344,8 @@ function firstRun() {
   await loadOpenings();
   if (!store.profile) { layout(h('div.content')); await firstRun(); }
   go('home');
+  window.api.onFilesWaiting(() => takeWaitingFiles());
+  takeWaitingFiles();
+  // refresh the home screen's goal/streak when study is logged elsewhere (e.g. after returning)
+  window.addEventListener('activity-changed', () => { const t = document.querySelector('.today'); if (t && activeId === 'home') renderToday(t); });
 })();

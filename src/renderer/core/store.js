@@ -7,6 +7,8 @@ const DEFAULT_SETTINGS = {
   opponentDelay: 500,   // ms before the master's opponent move is played
   threads: 0,           // 0 = automatic
   boardTheme: 'blue',
+  teacherMode: false,  // shows the 'Öğretmen' section (packages, students' reports)
+  dailyGoal: null,     // student's own goal when no assignment sets one: { puzzles, openings, gtmGames, playGames }
 };
 
 export const store = {
@@ -19,7 +21,10 @@ export const store = {
     this.profile = await api.read('profile', null);
     this.games = await api.read('gtm/games', []);
     this.attempts = await api.read('gtm/attempts', {});
-    if (this.profile) ensureRatings(this.profile);
+    if (this.profile) {
+      ensureRatings(this.profile);
+      if (!this.profile.id) { this.profile.id = newId(); this.saveProfile(); }
+    }
   },
   saveSettings() { return api.write('settings', this.settings); },
   saveProfile() { return api.write('profile', this.profile); },
@@ -40,5 +45,8 @@ export function ensureRatings(profile) {
 }
 
 export function newProfile(name) {
-  return ensureRatings({ name, createdAt: Date.now(), ratings: {} });
+  return ensureRatings({ id: newId(), name, createdAt: Date.now(), ratings: {} });
 }
+
+// Stable random id for a student, so the teacher can tell two students with the same name apart.
+function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
