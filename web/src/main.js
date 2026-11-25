@@ -19,7 +19,7 @@ import openings from '../../src/renderer/modules/openings/index.js';
 import play from '../../src/renderer/modules/play/index.js';
 import videos from './videos.js';
 import ranking, { homeRanking } from './ranking.js';
-import schedule, { homeNextLesson } from './schedule.js';
+import schedule, { homeNextLesson, homeLessonReport } from './schedule.js';
 import lichessPlay, { live } from './lichess-play.js';
 import { loadOpenings } from '../../src/renderer/core/openings.js';
 import { startErrorLog, recentErrors } from './errlog.js';
@@ -276,6 +276,7 @@ async function renderHome(root) {
       me.role === 'coach' ? h('div.hero-actions', h('button.btn.primary', { onclick: () => go('teacher') }, 'Öğrencilerim')) : null),
     annHost,
     contHost,
+    me.role === 'student' ? homeLessonReport(go) : null,
     me.role === 'student' ? homeNextLesson(go) : null,
     localStorage.getItem('koroglu-kurulum-kapat') ? null : installCard({ onDismiss: () => localStorage.setItem('koroglu-kurulum-kapat', '1') }),
     me.role === 'student' ? today : null,

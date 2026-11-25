@@ -9,6 +9,7 @@ import { h, clear, modal, toast, fmtDate } from '../../src/renderer/core/dom.js'
 import { academyStudents, academyCoaches, meta, syncReports } from './coach.js';
 import { students as reports } from '../../src/renderer/core/assign.js';
 import { PuzzleSolver } from '../../src/renderer/modules/puzzles/solver.js';
+import { finishDialog, shareDialog, makeupStatus, openStudentReport } from './lessonReport.js';
 
 const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 const DAYS_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
@@ -103,7 +104,7 @@ async function coachView(body, me) {
         h('div.lesson-meta', [coachShort(l.coach_ids), `${l.student_ids.length} öğr.`, l.location].filter(Boolean).join(' · ')),
         l.cancelled ? h('span.chip.warn', 'İptal') : att.length ? h('span.chip.ok', `Yoklama ${came}/${l.student_ids.length}`) : null,
         l.makeup ? h('span.chip', 'Telafi') : null,
-        l.note ? h('span.chip', '📝 not') : null);
+        l.session && l.session.finished_at ? h('span.chip.ok', '📋 rapor') : l.note ? h('span.chip', '📝 not') : null);
     };
     clear(body).append(h('div.schedule',
       h('div.toolbar',
@@ -139,27 +140,38 @@ async function ensureSession(l, me) {
 function lessonRef(l) { return l.cls ? { class_id: l.cls.id, date: l.date } : { session_id: l.session && l.session.id, date: l.date }; }
 const sameLesson = (a, b) => !!a && !!b && a.date === b.date && (a.class_id ? a.class_id === b.class_id : !!a.session_id && a.session_id === b.session_id);
 
-// Homework linked to lessons: "given in this lesson" and the summary of the previous lesson's homework.
-async function lessonHomework(l, host, close, me) {
+// Homework linked to a lesson: given in this lesson, the make-up package, and the previous lesson's homework.
+async function linkedHomework(l) {
   const ref = lessonRef(l);
+  const { data, error } = await supa.from('assignments').select('id, title, package, created_at, assignment_targets(student_id)').order('created_at');
+  if (error) throw error;
+  const linked = data.filter((a) => a.package && a.package.lesson);
+  const sid = l.session && l.session.id;
+  const here = linked.filter((a) => !a.package.makeup && sameLesson(a.package.lesson, ref));
+  const makeup = linked.filter((a) => a.package.makeup && sid && a.package.lesson.session_id === sid);
+  let prev = [];
+  if (l.cls) {
+    const before = linked.filter((a) => !a.package.makeup && a.package.lesson.class_id === l.cls.id && a.package.lesson.date < l.date);
+    const last = before.reduce((m, a) => (a.package.lesson.date > m ? a.package.lesson.date : m), '');
+    prev = before.filter((a) => a.package.lesson.date === last);
+  }
+  return { ref, here, makeup, prev };
+}
+
+async function lessonHomework(l, host, close, me) {
   const giveBtn = h('button.btn.small.primary', { onclick: async () => {
+    const ref = lessonRef(l);
     // make sure the lesson exists as a session row, so students see the homework under their past lessons
     try { const s = await ensureSession(l, me); if (!l.cls) ref.session_id = s.id; } catch (e) { /* the link still works for coaches */ }
     window.__lessonCtx = { ref, studentIds: l.student_ids.slice(), label: `${l.name} · ${fmtDate(parseKey(l.date))}` };
     close(); window.goTo('teacher');
   } }, '📚 Bu dersten ödev ver');
   clear(host).append(h('div.form-l', 'Ödev', h('span.spacer'), giveBtn), h('div.muted.small', 'Yükleniyor…'));
-  const { data, error } = await supa.from('assignments').select('id, title, package, created_at, assignment_targets(student_id)').order('created_at');
-  if (error) { clear(host).append(h('div.form-l', 'Ödev', h('span.spacer'), giveBtn), h('div.muted.small', 'Ödevler alınamadı.')); return; }
-  const linked = data.filter((a) => a.package && a.package.lesson);
-  const here = linked.filter((a) => sameLesson(a.package.lesson, ref));
-  let prev = [];
-  if (l.cls) {
-    const before = linked.filter((a) => a.package.lesson.class_id === l.cls.id && a.package.lesson.date < l.date);
-    const last = before.reduce((m, a) => (a.package.lesson.date > m ? a.package.lesson.date : m), '');
-    prev = before.filter((a) => a.package.lesson.date === last);
-  }
-  if (prev.length) await syncReports().catch(() => 0);
+  let hw;
+  try { hw = await linkedHomework(l); } catch (e) { clear(host).append(h('div.form-l', 'Ödev', h('span.spacer'), giveBtn), h('div.muted.small', 'Ödevler alınamadı.')); return; }
+  l._hw = hw;
+  const { here, prev } = hw;
+  if (prev.length || hw.makeup.length) await syncReports().catch(() => 0);
   clear(host).append(...[h('div.form-l', 'Ödev', h('span.spacer'), giveBtn),
     here.length ? h('div.muted.small', 'Bu derste verilen: ', here.map((a) => a.title).join(', ')) : null,
     ...prev.map((a) => homeworkSummary(a)),
@@ -206,6 +218,7 @@ function showPuzzle(p, title) {
 
 function lessonDialog(l, att, me, done) {
   const hwHost = h('div.lesson-hw');
+  const repHost = h('div.lesson-hw');
   const marks = Object.fromEntries(att.map((a) => [a.student_id, a.status]));
   const note = h('textarea.paste', { rows: 3, placeholder: 'Bu derste ne işlendi? (örn. Çatal 2. bölüm, ödev: 10 bulmaca)' }, l.note || '');
   const rows = l.student_ids.map((sid) => {
@@ -223,8 +236,8 @@ function lessonDialog(l, att, me, done) {
     h('div.form-l', 'Yoklama', h('span.spacer'), l.student_ids.length ? allCame : null),
     l.student_ids.length ? h('div.att-list', rows) : h('div.muted.small', 'Bu derse kayıtlı öğrenci yok.'),
     h('div.form-l', 'Ders notu'), note,
-    hwHost);
-  const save = async (status) => {
+    hwHost, repHost);
+  const save = async (status, quiet) => {
     try {
       const s = await ensureSession(l, me);
       const patch = { note: note.value.trim() || null, updated_at: new Date().toISOString() };
@@ -235,14 +248,40 @@ function lessonDialog(l, att, me, done) {
       const off = Object.entries(marks).filter(([, v]) => !v).map(([sid]) => sid);
       if (up.length) { const { error: e2 } = await supa.from('attendance').upsert(up, { onConflict: 'session_id,student_id' }); if (e2) throw e2; }
       if (off.length) await supa.from('attendance').delete().eq('session_id', s.id).in('student_id', off);
-      toast(status === 'cancelled' ? 'Ders iptal edildi' : status === 'planned' ? 'İptal geri alındı' : 'Kaydedildi', 'ok');
+      if (!quiet) toast(status === 'cancelled' ? 'Ders iptal edildi' : status === 'planned' ? 'İptal geri alındı' : 'Kaydedildi', 'ok');
+      s.note = patch.note;
       done();
-    } catch (e) { toast('Kaydedilemedi: ' + e.message, 'error'); }
+      return s;
+    } catch (e) { toast('Kaydedilemedi: ' + e.message, 'error'); return null; }
   };
+  const reportOpts = async (s) => {
+    const hw = l._hw || (l._hw = await linkedHomework(l).catch(() => ({ here: [], makeup: [], prev: [], ref: lessonRef(l) })));
+    return { session: s, lessonName: l.name, studentIds: l.student_ids, kind: l.kind, marks: { ...marks }, studentName, me, ref: hw.ref,
+      hwTitles: hw.here.map((a) => a.title), hadSets: hw.here.some((a) => (a.package.sets || []).length), makeupExists: hw.makeup.length > 0, onSaved: done };
+  };
+  const finish = async () => {
+    const s = await save(null, true);
+    if (!s) return;
+    finishDialog(await reportOpts(s));
+  };
+  if (l.session && l.session.finished_at) {
+    const absent = l.student_ids.filter((sid) => marks[sid] === 'gelmedi' || marks[sid] === 'mazeretli');
+    clear(repHost).append(h('div.form-l', '📋 Ders raporu', h('span.spacer'),
+      h('button.btn.small', { onclick: async () => {
+        const o = await reportOpts(l.session);
+        const { data } = await supa.from('session_notes').select('student_id, note').eq('session_id', l.session.id);
+        const hw = l._hw;
+        shareDialog({ ...o, notes: Object.fromEntries((data || []).map((r) => [r.student_id, r.note])),
+          makeupFor: hw.makeup.length ? hw.makeup[0].assignment_targets.map((t) => t.student_id) : [], makeupTitle: hw.makeup.length ? hw.makeup[0].title : null });
+      } }, 'Raporu gör / paylaş')),
+    h('div.muted.small', [l.session.topic, l.session.finished_at ? 'kaydedildi ' + fmtDate(l.session.finished_at) : ''].filter(Boolean).join(' · ')));
+    if (absent.length) makeupStatus(l.session, absent, studentName).then((el) => el && repHost.append(el)).catch(() => {});
+  }
   const actions = [{ label: 'Vazgeç' }];
   if (l.kind === 'tek') actions.push({ label: 'Dersi sil', onClick: () => { supa.from('sessions').delete().eq('id', l.session.id).then(({ error }) => { if (error) toast(error.message, 'error'); else { toast('Ders silindi', 'ok'); done(); } }); } });
   actions.push(l.cancelled ? { label: 'İptali geri al', onClick: () => { save('planned'); } } : { label: 'Dersi iptal et', onClick: () => { save('cancelled'); } });
   actions.push({ label: 'Kaydet', primary: true, onClick: () => { save(null); } });
+  if (!l.cancelled) actions.push({ label: l.session && l.session.finished_at ? 'Raporu düzenle ▸' : 'Dersi bitir ▸', primary: true, onClick: () => { finish(); } });
   const m = modal({ title: l.name, wide: true, body, actions });
   lessonHomework(l, hwHost, () => m.close(), me);
 }
@@ -366,18 +405,30 @@ export async function nextLessons(limit = 5, days = 14) {
     .map((l) => { const d = parseKey(l.date); const diff = Math.round((d - from) / 86400e3); return { ...l, dayLabel: diff === 0 ? 'Bugün' : diff === 1 ? 'Yarın' : `${DAYS[(d.getDay() + 6) % 7]} ${fmtDay(d)}` }; });
 }
 
+// Student: lessons with their reports. hw = homework linked to lessons (non-make-up) and make-up packages sent to me.
+async function studentData() {
+  const { data: as } = await supa.from('assignments').select('id, title, package');
+  const hw = (as || []).filter((a) => a.package && a.package.lesson);
+  const { data: ps } = await supa.from('sessions').select('*, classes(name)').order('date', { ascending: false }).limit(40);
+  const { data: a } = await supa.from('attendance').select('*');
+  const { data: rd } = await supa.from('session_reads').select('session_id');
+  const today = dateKey(new Date());
+  return { hw, past: (ps || []).filter((x) => x.date < today || x.finished_at).slice(0, 20), att: a || [], reads: new Set((rd || []).map((r) => r.session_id)) };
+}
+function reportCtx(s, d) {
+  const ref = s.class_id ? { class_id: s.class_id, date: s.date } : { session_id: s.id, date: s.date };
+  const hwTitles = d.hw.filter((x) => !x.package.makeup && sameLesson(x.package.lesson, ref)).map((x) => x.title);
+  const mk = d.hw.find((x) => x.package.makeup && x.package.lesson.session_id === s.id);
+  const a = d.att.find((x) => x.session_id === s.id);
+  return { lessonName: (s.classes && s.classes.name) || s.title || 'Ders', hwTitles, attStatus: a ? a.status : null, makeup: mk ? `"${mk.title}" ödevin hazır.` : null };
+}
+
 async function studentView(body) {
   clear(body).append(h('div.empty', 'Yükleniyor…'));
-  let next = [], past = [], att = [], hw = [];
-  try {
-    const { data: as } = await supa.from('assignments').select('id, title, package');
-    hw = (as || []).filter((a) => a.package && a.package.lesson);
-    next = await nextLessons(8, 21);
-    const { data: ps } = await supa.from('sessions').select('*, classes(name)').lt('date', dateKey(new Date())).order('date', { ascending: false }).limit(20);
-    past = ps || [];
-    const { data: a } = await supa.from('attendance').select('*');
-    att = a || [];
-  } catch (e) { clear(body).append(h('div.empty', 'Program alınamadı: ' + e.message)); return; }
+  let next = [], d;
+  try { [next, d] = await Promise.all([nextLessons(8, 21), studentData()]); } catch (e) { clear(body).append(h('div.empty', 'Program alınamadı: ' + e.message)); return; }
+  const today = dateKey(new Date());
+  const past = d.past.filter((s) => s.date < today || s.finished_at);
   const attLabel = { geldi: '✓ Geldin', gelmedi: '✗ Gelmedin', mazeretli: 'Mazeretli' };
   clear(body).append(h('div.schedule-student',
     h('div.panel', h('div.panel-title', 'Sonraki derslerin'),
@@ -385,13 +436,36 @@ async function studentView(body) {
         l.cancelled ? h('span.chip.warn', 'İptal') : null, l.makeup ? h('span.chip', 'Telafi') : null))
         : h('div.muted', 'Önümüzdeki günlerde dersin görünmüyor.')),
     h('div.panel', h('div.panel-title', 'Geçmiş dersler'),
-      past.length ? past.map((s) => { const a = att.find((x) => x.session_id === s.id); return h('div.past-row',
-        h('div', h('b', fmtDate(parseKey(s.date))), ' ', (s.classes && s.classes.name) || s.title || 'Ders', s.status === 'cancelled' ? h('span.chip.warn', 'İptal') : a ? h('span.chip' + (a.status === 'geldi' ? '.ok' : ''), attLabel[a.status]) : null),
-        s.note ? h('div.past-note', s.note) : null,
-        hw.filter((x) => sameLesson(x.package.lesson, s.class_id ? { class_id: s.class_id, date: s.date } : { session_id: s.id, date: s.date }))
-          .map((x) => h('button.past-hw', { onclick: () => window.goTo('home') }, '📚 Ödev: ', x.title))); })
+      past.length ? past.map((s) => {
+        const c = reportCtx(s, d);
+        return h('div.past-row',
+          h('div', h('b', fmtDate(parseKey(s.date))), ' ', c.lessonName, s.topic ? h('span.muted', ' · ' + s.topic) : null,
+            s.status === 'cancelled' ? h('span.chip.warn', 'İptal') : c.attStatus ? h('span.chip' + (c.attStatus === 'geldi' ? '.ok' : ''), attLabel[c.attStatus]) : null),
+          s.finished_at ? h('button.btn.small' + (d.reads.has(s.id) ? '' : '.primary'), { onclick: async () => { await openStudentReport(s, { ...c, go: window.goTo }); d.reads.add(s.id); } }, d.reads.has(s.id) ? '📋 Ders raporu' : '📋 Ders raporu (yeni)')
+            : s.note ? h('div.past-note', s.note) : null,
+          !s.finished_at ? c.hwTitles.map((t) => h('button.past-hw', { onclick: () => window.goTo('home') }, '📚 Ödev: ', t)) : null);
+      })
         : h('div.muted', 'Henüz kayıtlı ders yok.'))));
 }
+
+// Home card for students: the newest lesson report not read yet (missed lessons first).
+export function homeLessonReport(go) {
+  const host = h('div');
+  studentData().then((d) => {
+    const from = dateKey(addDays(new Date(), -10));
+    const unread = d.past.filter((s) => s.finished_at && s.date >= from && !d.reads.has(s.id));
+    if (!unread.length) return;
+    const pick = unread.find((s) => { const a = d.att.find((x) => x.session_id === s.id); return a && a.status !== 'geldi'; }) || unread[0];
+    const c = reportCtx(pick, d);
+    const missed = c.attStatus === 'gelmedi' || c.attStatus === 'mazeretli';
+    host.append(h('button.continue-card.report-card', { onclick: async () => { await openStudentReport(pick, { ...c, go }); host.remove(); } },
+      h('div', h('div.cc-k', missed ? 'Kaçırdığın dersin özeti' : 'Son dersinin raporu'), h('div.cc-title', c.lessonName + (pick.topic ? ' · ' + pick.topic : '')),
+        h('div.muted.small', [longDateShort(pick.date), pick.critical ? 'kritik konum' : '', c.hwTitles.length ? 'ödev' : '', c.makeup ? 'telafi ödevi' : ''].filter(Boolean).join(' · '))),
+      h('span.cc-go', 'Oku ▸')));
+  }).catch(() => {});
+  return host;
+}
+const longDateShort = (k) => { const x = parseKey(k); return `${x.getDate()} ${['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'][x.getMonth()]}`; };
 
 // Home card for students: the next lesson (and a cancellation warning).
 export function homeNextLesson(go) {

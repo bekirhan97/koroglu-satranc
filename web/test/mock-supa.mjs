@@ -4,11 +4,11 @@
 import crypto from 'node:crypto';
 
 export function createMock() {
-  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [], student_coaches: [], classes: [], class_members: [], sessions: [], attendance: [], scores: [], client_errors: [] };
+  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [], student_coaches: [], classes: [], class_members: [], sessions: [], attendance: [], scores: [], client_errors: [], session_notes: [], session_reads: [] };
   const users = new Map(); // email -> { id, password }
   const tokens = new Map(); // token -> user id
   const DOMAIN = 'kullanici.koroglu-satranc.app';
-  const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'], classes: ['id'], class_members: ['class_id', 'student_id'], sessions: ['id'], attendance: ['session_id', 'student_id'], scores: ['id'], client_errors: ['id'] };
+  const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'], classes: ['id'], class_members: ['class_id', 'student_id'], sessions: ['id'], attendance: ['session_id', 'student_id'], scores: ['id'], client_errors: ['id'], session_notes: ['session_id', 'student_id'], session_reads: ['session_id', 'student_id'] };
 
   const prof = (id) => db.profiles.find((x) => x.id === id);
   const academyOf = (p) => (p ? (p.role === 'coach' && !p.coach_id ? p.id : p.coach_id) : null);
@@ -133,6 +133,7 @@ export function createMock() {
       if (table === 'sessions') { rows = rows.filter((x) => (isCoach && x.academy_id === acad) || (x.class_id && db.class_members.some((m) => m.class_id === x.class_id && m.student_id === uid)) || (x.student_ids || []).includes(uid));
         if ((url.searchParams.get('select') || '').includes('classes(')) rows = rows.map((x) => ({ ...x, classes: x.class_id ? { name: (db.classes.find((c) => c.id === x.class_id) || {}).name } : null })); }
       if (table === 'attendance') rows = rows.filter((a) => a.student_id === uid || isCoach);
+      if (table === 'session_notes' || table === 'session_reads') rows = rows.filter((a) => a.student_id === uid || isCoach);
       if (table === 'assignments' && url.searchParams.get('select') && url.searchParams.get('select').includes('assignment_targets')) rows = rows.map((a) => ({ ...a, assignment_targets: db.assignment_targets.filter((t) => t.assignment_id === a.id).map((t) => ({ student_id: t.student_id })) }));
       if (table === 'lichess_accounts') rows = rows.filter((r) => r.user_id === uid || r.coach_id === acad);
       if (table === 'reports') rows = rows.filter((r) => r.student_id === uid || (isCoach && prof(r.student_id) && prof(r.student_id).coach_id === acad));
@@ -147,6 +148,7 @@ export function createMock() {
         const row = { ...row0 };
         if (['classes', 'sessions'].includes(table) && !row.id) { row.id = crypto.randomUUID(); row.created_at = new Date().toISOString(); }
         if (table === 'client_errors') { row.id = db.client_errors.length + 1; row.user_id = uid; row.created_at = new Date().toISOString(); }
+        if (table === 'session_reads') { row.student_id = row.student_id || uid; row.read_at = new Date().toISOString(); }
         if (table === 'scores') { row.id = db.scores.length + 1; row.created_at = new Date().toISOString(); }
         if (table === 'announcements') { row.id = crypto.randomUUID(); row.coach_id = uid; row.created_at = new Date().toISOString(); }
         if (table === 'videos') { row.id = row.id || crypto.randomUUID(); row.coach_id = row.coach_id || uid; row.created_at = new Date().toISOString(); }

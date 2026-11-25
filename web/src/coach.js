@@ -245,10 +245,7 @@ export function accountsHooks(me) {
         actions: [{ label: 'Vazgeç', onClick: () => resolve(false) }, { label: 'Gönder', primary: true, onClick: () => {
           if (!chosen.size) { toast('En az bir öğrenci seçin', 'error'); return false; }
           (async () => {
-            const { error } = await supa.from('assignments').insert({ id: pkg.id, coach_id: me.id, title: pkg.title, package: pkg });
-            if (error) { toast('Ödev kaydedilemedi: ' + error.message, 'error'); return resolve(false); }
-            const { error: e2 } = await supa.from('assignment_targets').insert([...chosen].map((sid) => ({ assignment_id: pkg.id, student_id: sid })));
-            if (e2) { await supa.from('assignments').delete().eq('id', pkg.id); toast('Öğrencilere atanamadı: ' + e2.message, 'error'); return resolve(false); }
+            try { await createAssignment(pkg, [...chosen], me); } catch (e) { toast(e.message, 'error'); return resolve(false); }
             toast(`Ödev ${chosen.size} öğrenciye gönderildi. Öğrenciler siteye girince görür.`, 'ok');
             resolve(true);
           })();
@@ -256,6 +253,14 @@ export function accountsHooks(me) {
       }));
     },
   };
+}
+
+// Save an assignment package and its students (used by "Ödev ver" and by lesson make-up packages).
+export async function createAssignment(pkg, studentIds, me) {
+  const { error } = await supa.from('assignments').insert({ id: pkg.id, coach_id: me.id, title: pkg.title, package: pkg });
+  if (error) throw new Error('Ödev kaydedilemedi: ' + error.message);
+  const { error: e2 } = await supa.from('assignment_targets').insert(studentIds.map((sid) => ({ assignment_id: pkg.id, student_id: sid })));
+  if (e2) { await supa.from('assignments').delete().eq('id', pkg.id); throw new Error('Öğrencilere atanamadı: ' + e2.message); }
 }
 
 function field(label, input, hint) { return h('label.form-row', h('span.form-l', label), input, hint ? h('span.muted.small', hint) : null); }

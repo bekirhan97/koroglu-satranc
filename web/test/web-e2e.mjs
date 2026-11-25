@@ -220,6 +220,27 @@ console.log('  ders öğrencileri önceden seçili:', await c.locator('.modal .p
 await c.click('.modal button:has-text("Gönder")'); await c.waitForTimeout(2500);
 const lessonAsg = MOCK.db.assignments.find((a) => a.title === 'Ders ödevi – Çatal');
 console.log('  ödev derse bağlandı:', JSON.stringify(lessonAsg && lessonAsg.package.lesson), '· programa döndü:', await c.locator('.week-grid').count());
+step('dersi bitir: ders sonu raporu + telafi');
+await c.locator('.lesson:not(.tek)').first().click(); await c.waitForTimeout(1500);
+await c.locator('.modal .att-row').filter({ hasText: 'Şükrü' }).locator('.att-btn.gelmedi').click();
+await c.click('.modal button:has-text("Dersi bitir")'); await c.waitForTimeout(2500);
+await c.fill('.lr-form input.big-input >> nth=0', 'Kritik Kare');
+await c.click('button:has-text("+ Kritik konum ekle")'); await c.waitForTimeout(800);
+await c.fill('.lr-editor .fen-input', '8/8/8/4k3/8/4K3/4P3/8 w - - 0 1'); await c.press('.lr-editor .fen-input', 'Enter'); await c.waitForTimeout(300);
+await c.fill('.lr-crit-edit input.big-input', 'Beyaz oynar: kritik kareyi kim alır?');
+await c.click('button:has-text("Konumu kullan")'); await c.waitForTimeout(300);
+await c.click('.lr-notes summary');
+await c.locator('.lr-note-row').filter({ hasText: 'Şükrü' }).locator('textarea').fill('Aday hamleleri iyi buluyor, ara hamleleri kontrol etmeli.');
+await c.selectOption('.lr-makeup select >> nth=0', 'fork');
+await shot(c, '07i-dersi-bitir');
+await c.click('.modal button:has-text("Kaydet ve paylaş")'); await c.waitForTimeout(3000);
+console.log('  paylaşım metni:', (await c.locator('.lr-text').textContent().catch(() => 'yok')).split('\n').slice(0, 4).join(' | '));
+console.log('  öğrenci satırları:', await c.locator('.lr-share-row').count());
+const sess = MOCK.db.sessions.find((x) => x.topic === 'Kritik Kare');
+console.log('  kayıt:', !!sess, sess && sess.critical && sess.critical.fen, '· kişisel not:', MOCK.db.session_notes.length, '· telafi ödevi:', MOCK.db.assignments.filter((a) => a.package.makeup).map((a) => a.title + ' → ' + MOCK.db.assignment_targets.filter((t) => t.assignment_id === a.id).length + ' öğr.').join(', '));
+await shot(c, '07j-rapor-paylas');
+await c.click('.modal button:has-text("Tamam")'); await c.waitForTimeout(800);
+
 
 step('öğrenci girişi');
 const s = await newPage({ width: 390, height: 844 });
@@ -234,6 +255,16 @@ await s.click('button:has-text("Giriş yap")');
 await s.waitForSelector('.home', { timeout: 20000 }); await s.waitForTimeout(2500);
 await shot(s, '09-ogrenci-ana-telefon');
 console.log('  sonraki ders kartı:', await s.locator('.next-lesson').count());
+console.log('  rapor kartı:', await s.locator('.report-card').textContent().catch(() => 'yok'));
+await s.click('.report-card'); await s.waitForTimeout(1500);
+console.log('  rapor:', (await s.locator('.modal .lr-card').textContent().catch(() => 'yok')).replace(/\s+/g, ' ').slice(0, 300));
+await shot(s, '09b-ders-raporu');
+await s.click('.modal .lr-crit button:has-text("Tahtada aç")'); await s.waitForTimeout(1200);
+console.log('  kritik konum tahtada:', await s.locator('.crit-board cg-board').count());
+await shot(s, '09c-kritik-konum');
+await s.locator('.modal button:has-text("Kapat")').last().click(); await s.waitForTimeout(300);
+await s.locator('.modal button:has-text("Kapat")').last().click(); await s.waitForTimeout(300);
+console.log('  okundu kaydı:', MOCK.db.session_reads.length, '· kart kalktı:', await s.locator('.report-card').count() === 0);
 console.log('  devam et kartı:', await s.locator('.continue-card').textContent().catch(() => 'yok'));
 console.log('  ödev görünüyor:', await s.locator('.asg-title').count(), '· duyuru:', await s.locator('.ann-panel .ann-row').count(), '· sıralama:', await s.locator('.lb-panel').count(), '· kurulum kartı:', await s.locator('.install-card').count());
 
