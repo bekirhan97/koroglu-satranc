@@ -146,3 +146,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" out/*-Mac-*.zip out/latest-mac.yml --clobber
+
+  cleanup:
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deneme sürümlerini ve geçici dalları temizle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          TAG="${TAG#release/}"
+          case "$TAG" in *-*) exit 0;; esac
+          for t in $(gh release list -R "$REPO" --limit 50 --json tagName,isPrerelease -q '.[] | select(.isPrerelease) | .tagName'); do
+            case "$t" in "$TAG"-*) gh release delete "$t" -R "$REPO" --yes --cleanup-tag || true;; esac
+          done
+          for b in $(gh api "repos/$REPO/branches" --paginate -q '.[].name' | grep '^release/'); do
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$b" || true
+          done
