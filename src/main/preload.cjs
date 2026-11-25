@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   write: (name, data) => ipcRenderer.invoke('store:write', name, data),
   remove: (name) => ipcRenderer.invoke('store:delete', name),
   openings: () => ipcRenderer.invoke('res:openings'),
+  miniatures: () => ipcRenderer.invoke('res:miniatures'),
   puzzles: () => ipcRenderer.invoke('res:puzzles'),
   maiaWeights: (elo) => ipcRenderer.invoke('res:maia', elo),
   maiaTables: () => ipcRenderer.invoke('res:maiaTables'),

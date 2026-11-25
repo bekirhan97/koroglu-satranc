@@ -22,6 +22,7 @@ export const pdata = {
     const rv = await api.read('puzzles/review', {});
     this.review = rv.cards || {};
     this.graduated = rv.graduated || 0;
+    this.loaded = true;
     this.sets = await api.read('puzzles/sets', []);
     this.progress = await api.read('puzzles/progress', {});
     this.seen = new Set(this.history.filter((x) => x.src === 'lichess').map((x) => x.id));
@@ -33,6 +34,8 @@ export const pdata = {
   saveHistory() { return api.write('puzzles/history', this.history); },
   saveSets() { return api.write('puzzles/sets', this.sets); },
   saveProgress() { return api.write('puzzles/progress', this.progress); },
+  // Load once per session (the report and assignment progress need the data even if Bulmacalar was never opened).
+  async ensure() { if (!this.loaded) await this.load(); return this; },
   saveReview() { return api.write('puzzles/review', { cards: this.review, graduated: this.graduated }); },
 };
 

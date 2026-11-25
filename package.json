@@ -63,6 +63,10 @@
         "to": "puzzles.json"
       },
       {
+        "from": "resources/miniatures.pgn",
+        "to": "miniatures.pgn"
+      },
+      {
         "from": "resources/maia",
         "to": "maia"
       },

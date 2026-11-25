@@ -139,6 +139,7 @@ export async function importPackage(pkg) {
 
 // Progress of one assignment: fraction done for each part and overall.
 export async function assignmentProgress(a) {
+  await pdata.ensure();
   const parts = [];
   if (a.items.gtm.length) {
     const done = a.items.gtm.filter((id) => attemptsOf(id).some((x) => x.status === 'done')).length;
@@ -176,6 +177,7 @@ export async function assignmentProgress(a) {
 const thin = (hist, max = 150) => { if (hist.length <= max) return hist; const step = hist.length / max; const out = []; for (let i = 0; i < max; i++) out.push(hist[Math.floor(i * step)]); out.push(hist[hist.length - 1]); return out; };
 
 export async function buildReport() {
+  await pdata.ensure();
   await activity.load();
   await assignments.load();
   const p = store.profile;
@@ -228,6 +230,8 @@ export async function buildReport() {
     play: { ...res, total: playGames.length, recent: playGames.slice(-10).reverse().map((g) => ({ t: g.t, opp: g.opp, result: g.result, side: g.userColor, reason: g.reason, tc: g.tc || null })) },
     activity: { days: lastDays(activity.days, 56), streak: streak(activity.days, goal), goal },
     assignments: asg,
+    badges: await api.read('badges', {}),
+    exams: await api.read('exams', {}),
   };
 }
 

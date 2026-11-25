@@ -17,7 +17,7 @@ const REP = `[Event "Italyan"]\n\n1. e4 e5 2. Nf3 Nc6 (2... Nf6 3. Ng5) 3. Bc4 B
 async function resetAs(name) {
   mem.clear();
   store.profile = newProfile(name); store.games = []; store.attempts = {}; store.settings = { ...store.settings, dailyGoal: null };
-  pdata.history = []; pdata.sets = []; pdata.progress = {}; pdata.review = {}; pdata.seen = new Set();
+  pdata.history = []; pdata.sets = []; pdata.progress = {}; pdata.review = {}; pdata.seen = new Set(); pdata.loaded = true;
   odata.reps = []; odata.trees.clear(); odata.srs.clear();
   activity.days = {};
 }

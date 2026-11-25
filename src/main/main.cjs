@@ -131,6 +131,7 @@ app.whenReady().then(() => {
     if (/^https:\/\/lichess\.org\//.test(url) || url.startsWith('https://github.com/bekirhan97/koroglu-satranc')) shell.openExternal(url);
     return true;
   });
+  ipcMain.handle('res:miniatures', () => fs.readFileSync(path.join(resRoot, 'miniatures.pgn'), 'utf8'));
   ipcMain.handle('res:openings', () => JSON.parse(fs.readFileSync(path.join(resRoot, 'openings.json'), 'utf8')));
 
   ipcMain.handle('dialog:openPgn', async () => {

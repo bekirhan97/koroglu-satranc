@@ -12,8 +12,11 @@ export async function importPgnTexts(files) {
   const known = new Set(store.games.map((g) => g.id));
   for (const f of files) {
     for (const txt of splitPgn(f.text)) {
-      const g = parseGame(txt, f.name);
+      const col = (txt.match(/\[Collection "([^"]+)"\]/) || [])[1];
+      const g = parseGame(txt, col || f.name);
       if (!g || g.error) { bad++; continue; }
+      const trap = (txt.match(/\[Annotator "([^"]+)"\]/) || [])[1];
+      if (trap && col === 'Klasik tuzaklar') { g.headers.White = trap; g.headers.Black = 'Klasik tuzak'; }
       if (known.has(g.id)) { dup++; continue; }
       const op = openingName(gameFens(g));
       g.opening = op ? `${op.eco} ${op.name}` : '';
@@ -76,6 +79,7 @@ export class ListView {
     const collections = [...new Set(store.games.map((g) => g.collection))];
     const toolbar = h('div.toolbar',
       h('button.btn.primary', { onclick: () => this.import() }, '+ PGN İçe Aktar'),
+      h('button.btn', { onclick: () => this.builtins() }, '📚 Hazır koleksiyonlar'),
       h('input.search', { placeholder: 'Oyuncu, açılış ya da etkinlik ara…', value: this.filter, oninput: (e) => { this.filter = e.target.value; this.renderTable(); } }),
       h('select', { onchange: (e) => { this.collection = e.target.value; this.renderTable(); } },
         h('option', { value: '' }, 'Tüm koleksiyonlar'),
@@ -106,6 +110,27 @@ export class ListView {
       if (todo.length) this.bgHost.append(h('button.btn.small', { title: 'Zorluk değerlerini hesaplar ve oyunları önceden analiz eder', onclick: () => analyseAll(todo) }, `Önceden analiz et (${todo.length})`));
       if (!bg.running && bg.total && bg.done === bg.total) this.renderTable();
     }
+  }
+
+  // Collections shipped with the app (resources/miniatures.pgn).
+  async builtins() {
+    const text = await window.api.miniatures();
+    const groups = {};
+    for (const t of splitPgn(text)) { const c = (t.match(/\[Collection "([^"]+)"\]/) || [])[1] || 'Koleksiyon'; (groups[c] = groups[c] || []).push(t); }
+    const known = new Set(store.games.map((g) => g.collection));
+    const desc = { 'Tarihi minyatürler': 'Legall, Anderssen, Morphy, Steinitz, Réti, Alekhine, Fischer… Satranç tarihinin kısa ve parlak oyunları.', 'Klasik tuzaklar': 'Açılışlarda sık düşülen tuzaklar: Blackburne-Shilling, Englund, Sibirya, Fil tuzağı… Tuzağı kuran tarafı oynarsınız.' };
+    modal({
+      title: 'Hazır koleksiyonlar',
+      body: h('div.builtin-list', Object.entries(groups).map(([name, games]) => h('div.builtin',
+        h('div', h('b', name), h('span.muted', ` · ${games.length} oyun`), h('div.muted.small', desc[name] || '')),
+        known.has(name) ? h('span.chip.ok', 'Eklendi') : h('button.btn.small.primary', { onclick: async (e) => {
+          e.target.disabled = true;
+          this.afterImport(await importPgnTexts([{ name, text: games.join('\n\n') }]));
+          this.collection = name; this.render();
+          e.target.replaceWith(h('span.chip.ok', 'Eklendi'));
+        } }, 'Ekle')))),
+      actions: [{ label: 'Kapat', primary: true }],
+    });
   }
 
   async import() {

@@ -8,6 +8,7 @@ import { pdata } from '../puzzles/data.js';
 import { odata } from '../openings/data.js';
 import { THEME_GROUPS, themeName } from '../puzzles/themes.js';
 import { tcLabel } from '../play/index.js';
+import { BADGES } from '../../core/badges.js';
 
 const api = window.api;
 const ago = (t) => { const d = Math.floor((Date.now() - t) / 86400e3); return d <= 0 ? 'bugün' : d === 1 ? 'dün' : `${d} gün önce`; };
@@ -106,6 +107,8 @@ export default {
           h('div.daybars', days.map((d) => h('div.daybar', { title: `${d.key}: ${d.puzzles || 0} bulmaca, ${d.reviews || 0} tekrar, ${d.openings || 0} açılış pozisyonu, ${d.gtmMoves || 0} tahmin, ${d.playGames || 0} oyun` },
             h('span', { style: { height: `${dayTotal(d) ? 8 + (92 * dayTotal(d)) / maxDay : 0}%` } }), h('i', d.key.slice(8))))),
           goal ? h('div.muted.small', 'Günlük hedef: ' + GOAL_KINDS.filter(([k]) => goal[k] > 0).map(([k, unit]) => `${goal[k]} ${unit}`).join(', ') + (goal.from === 'self' ? ' (öğrencinin kendi hedefi)' : '')) : null),
+        r.badges && Object.keys(r.badges).length ? h('div.panel', h('div.panel-title', `Rozetler (${Object.keys(r.badges).length}/${BADGES.length})`),
+          h('div.badge-row', BADGES.filter((b) => r.badges[b.id]).map((b) => h('span.badge-chip', { title: `${b.desc} · ${fmtDate(r.badges[b.id])}` }, b.icon, ' ', b.name)))) : null,
         r.assignments.length ? h('div.panel', h('div.panel-title', 'Ödevler'),
           h('table.kv.asg', r.assignments.map((a) => h('tr',
             h('td', h('b', a.title), h('div.sub', a.parts.map((p) => `${p.done}/${p.total} ${p.label}`).join(' · '))),

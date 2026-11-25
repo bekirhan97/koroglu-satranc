@@ -10,6 +10,7 @@ import brandLogo from './assets/brand.png';
 import { activity, goalProgress, streak, GOAL_KINDS } from './core/activity.js';
 import { assignments, importPackage, assignmentProgress, buildReport, packageSummary } from './core/assign.js';
 import { importReports } from './modules/teacher/index.js';
+import { refreshBadges } from './core/badges.js';
 
 const visibleModules = () => modules.filter((m) => !m.teacherOnly || store.settings.teacherMode);
 
@@ -59,6 +60,7 @@ async function renderHome(root) {
   await Promise.all([activity.load(), assignments.load()]);
   const today = h('div.today');
   const asgHost = h('div.asg-host');
+  const badgeHost = h('div.badge-host');
   root.append(h('div.home',
     h('div.hero', h('div', h('h1', `Hoş geldin, ${p.name}`), h('p.muted', 'Bugün ne çalışmak istersin?')),
       h('div.hero-actions',
@@ -66,6 +68,7 @@ async function renderHome(root) {
         h('button.btn.primary', { onclick: () => sendReport() }, 'Rapor gönder'))),
     today,
     asgHost,
+    badgeHost,
     h('div.module-grid', visibleModules().map((m) => h('button.module-card' + (m.ready ? '' : '.disabled'), { onclick: () => go(m.id) },
       h('div.mc-icon', m.icon),
       h('div.mc-title', m.title, m.ready ? null : h('span.soon', 'yakında')),
@@ -73,6 +76,19 @@ async function renderHome(root) {
       m.homeInfo ? infoSlot(m) : null)))));
   renderToday(today);
   renderAssignments(asgHost);
+  renderBadges(badgeHost);
+}
+
+async function renderBadges(host) {
+  const { list, fresh } = await refreshBadges();
+  for (const b of fresh) toast(`${b.icon} Yeni rozet: ${b.name}!`, 'ok');
+  const earned = list.filter((b) => b.earned).length;
+  clear(host).append(h('div.panel.badges-panel',
+    h('div.panel-title', 'Rozetler', h('span.muted.small', ` ${earned}/${list.length}`)),
+    h('div.badge-grid', list.map((b) => h('div.badge' + (b.earned ? '.earned' : ''),
+      { title: `${b.name}: ${b.desc}` + (b.earned ? ` ✓ (${fmtDate(b.earnedAt)})` : ` – ${Math.min(b.current, b.goal)}/${b.goal}`) },
+      h('div.badge-icon', b.icon), h('div.badge-name', b.name),
+      b.earned ? null : h('div.badge-bar', h('span', { style: { width: `${Math.round(100 * b.progress)}%` } })))))));
 }
 
 function renderToday(host) {
