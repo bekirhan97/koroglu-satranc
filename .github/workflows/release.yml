@@ -115,12 +115,20 @@ jobs:
       - name: Öz test (Apple Silicon)
         run: |
           APP="$(ls -d out/mac-arm64/*.app | head -1)"
-          codesign --verify --deep --verbose=1 "$APP" || true
+          { echo "== codesign"; codesign --verify --deep --verbose=2 "$APP" 2>&1; codesign -dv "$APP" 2>&1; echo "== ls"; ls -la "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Resources/engines"/* 2>&1; } > "$RUNNER_TEMP/codesign.txt" 2>&1 || true
           xattr -cr "$APP"
           BIN="$(ls "$APP/Contents/MacOS/" | head -1)"
-          KOROGLU_DATA_DIR="$RUNNER_TEMP/kdata" KOROGLU_SELFTEST="$RUNNER_TEMP/selftest.json" timeout 180 "$APP/Contents/MacOS/$BIN" || true
+          KOROGLU_DATA_DIR="$RUNNER_TEMP/kdata" KOROGLU_SELFTEST="$RUNNER_TEMP/selftest.json" timeout 180 "$APP/Contents/MacOS/$BIN" > "$RUNNER_TEMP/stdout.txt" 2>&1 || echo "çıkış kodu $?" >> "$RUNNER_TEMP/stdout.txt"
           cat "$RUNNER_TEMP/selftest.json"
           node -e "process.exit(require(process.env.RUNNER_TEMP + '/selftest.json').ok ? 0 : 1)"
+      - name: Tanı bilgisini yükle (hata olursa)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          D="$RUNNER_TEMP/tani-mac.txt"
+          for f in codesign.txt stdout.txt selftest.json kdata/logs/koroglu.log; do echo "===== $f"; cat "$RUNNER_TEMP/$f" 2>&1; done > "$D"
+          gh release upload "$TAG" "$D" --clobber
       - name: Öz test (Intel, Rosetta ile)
         continue-on-error: true
         run: |
