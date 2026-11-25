@@ -41,19 +41,25 @@ export function themeCounts() {
 }
 
 // Pick an unseen puzzle near the target rating (window widens until something is found).
-export function pickPuzzle({ target, theme }) {
-  const db = pdata.db;
-  const ti = theme ? db.themes.indexOf(theme) : -1;
+// Every candidate inside the window is equally likely. (puzzles.json is sorted by rating, so stopping
+// at the first N candidates would always pick from below the target.)
+export function pickPuzzle({ target, theme, themes }) {
+  return pickFrom(pdata.db, { target, theme, themes, seen: pdata.seen });
+}
+
+export function pickFrom(db, { target, theme, themes, seen, random = Math.random }) {
+  const wanted = (themes && themes.length ? themes : theme ? [theme] : []).map((t) => db.themes.indexOf(t)).filter((i) => i >= 0);
+  if ((theme || (themes && themes.length)) && !wanted.length) return null;
   for (let w = 75; w <= 1600; w *= 2) {
-    const cands = [];
+    let chosen = null, n = 0;
     for (const row of db.puzzles) {
       if (Math.abs(row[3] - target) > w) continue;
-      if (ti >= 0 && !row[4].includes(ti)) continue;
-      if (pdata.seen.has(row[0])) continue;
-      cands.push(row);
-      if (cands.length > 400) break;
+      if (wanted.length && !wanted.some((i) => row[4].includes(i))) continue;
+      if (seen && seen.has(row[0])) continue;
+      n++;
+      if (random() * n < 1) chosen = row; // reservoir sampling: uniform over all candidates
     }
-    if (cands.length) return fromDb(cands[Math.floor(Math.random() * cands.length)], db.themes);
+    if (chosen) return fromDb(chosen, db.themes);
   }
   return null;
 }

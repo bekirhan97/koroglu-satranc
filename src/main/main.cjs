@@ -2,10 +2,20 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { UciEngine } = require('./engine.cjs');
+const { log } = require('./log.cjs');
+const backup = require('./backup.cjs');
+const updater = require('./updater.cjs');
 
 const isDev = !app.isPackaged;
 if (process.env.KOROGLU_DATA_DIR) app.setPath('userData', process.env.KOROGLU_DATA_DIR);
 const resRoot = isDev ? path.join(__dirname, '..', '..', 'resources') : process.resourcesPath;
+log.init(path.join(app.getPath('userData'), 'logs'));
+process.on('uncaughtException', (e) => log.error('Ana süreç hatası:', e));
+process.on('unhandledRejection', (e) => log.error('Ana süreç (promise):', e));
+
+// One running copy: opening a .kpaket/.krapor while the app is open hands the file to that window.
+const primary = !!process.env.KOROGLU_MULTI || app.requestSingleInstanceLock();
+if (!primary) app.quit();
 
 function enginePath() {
   const settings = readJson('settings', {});
@@ -22,7 +32,16 @@ const dataDir = () => path.join(app.getPath('userData'), 'data');
 function safeName(name) { return String(name).replace(/[^a-zA-Z0-9_\-/]/g, '_'); }
 function filePath(name) { return path.join(dataDir(), safeName(name) + '.json'); }
 function readJson(name, fallback = null) {
-  try { return JSON.parse(fs.readFileSync(filePath(name), 'utf8')); } catch { return fallback; }
+  const p = filePath(name);
+  let text;
+  try { text = fs.readFileSync(p, 'utf8'); } catch { return fallback; }
+  try { return JSON.parse(text); } catch (e) {
+    // Keep the damaged file instead of silently overwriting it later.
+    const keep = `${p}.bozuk-${Date.now()}`;
+    try { fs.copyFileSync(p, keep); } catch {}
+    log.error(`Bozuk veri dosyası: ${name}.json (kopyası: ${path.basename(keep)})`, e.message);
+    return fallback;
+  }
 }
 function writeJson(name, data) {
   const p = filePath(name);
@@ -32,6 +51,31 @@ function writeJson(name, data) {
   fs.renameSync(tmp, p);
   return true;
 }
+
+const backupDir = () => {
+  const s = readJson('settings', {});
+  return s.backupDir && fs.existsSync(s.backupDir) ? s.backupDir : path.join(app.getPath('userData'), 'backups');
+};
+
+// ---------- exchange files: ödev paketi (.kpaket), ilerleme raporu (.krapor) ----------
+const KINDS = {
+  paket: { ext: 'kpaket', label: 'Köroğlu ödev paketi' },
+  rapor: { ext: 'krapor', label: 'Köroğlu ilerleme raporu' },
+};
+const kindOf = (p) => Object.keys(KINDS).find((k) => p.toLowerCase().endsWith('.' + KINDS[k].ext));
+function readExchange(p) {
+  const kind = kindOf(p);
+  if (!kind) return { path: p, name: path.basename(p), error: 'Desteklenmeyen dosya türü' };
+  try {
+    const data = backup.readGzJson(p);
+    if (!data || data.format !== 'koroglu-' + kind) throw new Error('Dosya biçimi tanınmadı');
+    return { kind, path: p, name: path.basename(p), data };
+  } catch (e) { return { kind, path: p, name: path.basename(p), error: 'Dosya okunamadı: ' + e.message }; }
+}
+// Files passed on the command line (double-click in Explorer/Finder) wait here until the renderer asks.
+const pendingFiles = [];
+const queueArgs = (argv) => { for (const a of argv.slice(1)) if (!a.startsWith('-') && kindOf(a) && fs.existsSync(a)) pendingFiles.push(a); };
+queueArgs(process.argv);
 
 let engine = null;
 function getEngine() {
@@ -43,6 +87,8 @@ function getEngine() {
 }
 
 let win;
+const notifyFiles = () => { if (win && !win.isDestroyed() && pendingFiles.length) win.webContents.send('app:filesWaiting'); };
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 1100, minHeight: 700,
@@ -53,9 +99,25 @@ function createWindow() {
   });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, '..', '..', 'dist', 'index.html'));
+  win.webContents.on('console-message', (_e, level, message, line, source) => {
+    if (level >= 3) log.error('Arayüz:', message, source ? `(${path.basename(source)}:${line})` : '');
+  });
+  win.webContents.on('render-process-gone', (_e, d) => log.error('Arayüz süreci kapandı:', d.reason, d.exitCode));
+  win.on('unresponsive', () => log.warn('Pencere yanıt vermiyor'));
 }
 
+const saveDialog = (title, defaultPath, filters) => dialog.showSaveDialog(win, { title, defaultPath, filters });
+
+app.on('second-instance', (_e, argv) => {
+  queueArgs(argv);
+  if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+  notifyFiles();
+});
+app.on('open-file', (e, p) => { e.preventDefault(); if (kindOf(p)) { pendingFiles.push(p); notifyFiles(); } }); // macOS
+
 app.whenReady().then(() => {
+  if (!primary) return;
+  log.info(`Başladı: sürüm ${app.getVersion()}, ${process.platform}-${process.arch}`);
   ipcMain.handle('store:read', (_e, name, fallback) => readJson(name, fallback));
   ipcMain.handle('store:write', (_e, name, data) => writeJson(name, data));
   ipcMain.handle('store:delete', (_e, name) => { try { fs.unlinkSync(filePath(name)); } catch {} return true; });
@@ -63,7 +125,10 @@ app.whenReady().then(() => {
   ipcMain.handle('res:maia', (_e, elo) => fs.readFileSync(path.join(resRoot, 'maia', `maia-${+elo}.bin`)));
   ipcMain.handle('res:maiaTables', () => JSON.parse(fs.readFileSync(path.join(resRoot, 'maia', 'tables.json'), 'utf8')));
   ipcMain.handle('res:puzzles', () => fs.readFileSync(path.join(resRoot, 'puzzles.json'), 'utf8'));
-  ipcMain.handle('app:openExternal', (_e, url) => { if (/^https:\/\/lichess\.org\//.test(url)) shell.openExternal(url); return true; });
+  ipcMain.handle('app:openExternal', (_e, url) => {
+    if (/^https:\/\/lichess\.org\//.test(url) || url.startsWith('https://github.com/bekirhan97/koroglu-satranc')) shell.openExternal(url);
+    return true;
+  });
   ipcMain.handle('res:openings', () => JSON.parse(fs.readFileSync(path.join(resRoot, 'openings.json'), 'utf8')));
 
   ipcMain.handle('dialog:openPgn', async () => {
@@ -77,7 +142,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('engine:analyse', async (_e, req, priority) => {
     try { return await getEngine().analyse(req, priority); }
-    catch (e) { return { error: String(e.message || e) }; }
+    catch (e) { if (e.message !== 'cancelled') log.warn('Motor:', e.message); return { error: String(e.message || e) }; }
   });
   ipcMain.on('engine:stream', (e, reqId, req, priority) => {
     getEngine().analyse(req, priority, (lines) => {
@@ -91,14 +156,100 @@ app.whenReady().then(() => {
     const p = enginePath();
     const exists = fs.existsSync(p);
     let name = '';
-    if (exists) { try { await getEngine().start(); name = getEngine().name; } catch (e) { name = 'Hata: ' + e.message; } }
+    if (exists) { try { await getEngine().start(); name = getEngine().name; } catch (e) { name = 'Hata: ' + e.message; log.error('Motor başlatılamadı:', e); } }
+    else log.error('Motor bulunamadı:', p);
     return { path: p, exists, name };
   });
 
-  ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataDir: dataDir(), platform: process.platform }));
+  ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataDir: dataDir(), platform: process.platform, arch: process.arch, backupDir: backupDir() }));
   ipcMain.handle('app:openDataDir', () => { fs.mkdirSync(dataDir(), { recursive: true }); return shell.openPath(dataDir()); });
 
+  // ---------- log ----------
+  ipcMain.handle('log:write', (_e, level, msg) => { (level === 'error' ? log.error : level === 'warn' ? log.warn : log.info)('Arayüz:', String(msg).slice(0, 4000)); return true; });
+  ipcMain.handle('log:saveReport', async () => {
+    const r = await saveDialog('Hata raporunu kaydet', path.join(app.getPath('desktop'), `koroglu-hata-raporu-${backup.stamp()}.txt`), [{ name: 'Metin', extensions: ['txt'] }]);
+    if (r.canceled || !r.filePath) return null;
+    const s = readJson('settings', {});
+    const head = [
+      'Köroğlu Satranç – hata raporu', `Tarih: ${new Date().toLocaleString('tr-TR')}`,
+      `Sürüm: ${app.getVersion()}  Sistem: ${process.platform}-${process.arch} ${require('node:os').release()}`,
+      `Electron: ${process.versions.electron}  Motor: ${enginePath()} (${fs.existsSync(enginePath()) ? 'var' : 'YOK'})`,
+      `Ayarlar: ${JSON.stringify({ ...s, enginePath: s.enginePath ? '(özel)' : undefined })}`, '', '---- kayıt ----', ''].join('\n');
+    fs.writeFileSync(r.filePath, head + log.tail());
+    return r.filePath;
+  });
+
+  // ---------- backups ----------
+  ipcMain.handle('backup:export', async () => {
+    const r = await saveDialog('Yedeği kaydet', path.join(app.getPath('documents'), `koroglu-yedek-${backup.stamp()}${backup.EXT}`), [{ name: 'Köroğlu yedeği', extensions: ['kyedek'] }]);
+    if (r.canceled || !r.filePath) return null;
+    const res = backup.createBackup(dataDir(), r.filePath, app.getVersion());
+    log.info('Yedek alındı:', r.filePath);
+    return res;
+  });
+  // Step 1 of a restore: pick and inspect a file. Step 2 (backup:restore) needs the user's confirmation.
+  ipcMain.handle('backup:pick', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Yedek dosyası seç', properties: ['openFile'], filters: [{ name: 'Köroğlu yedeği', extensions: ['kyedek'] }] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    try {
+      const b = backup.readBackup(r.filePaths[0]);
+      return { path: r.filePaths[0], profileName: b.profileName, createdAt: b.createdAt, appVersion: b.appVersion, files: Object.keys(b.files).length };
+    } catch (e) { return { error: e.message }; }
+  });
+  ipcMain.handle('backup:list', () => backup.listBackups(backupDir()));
+  ipcMain.handle('backup:restore', (_e, p) => {
+    try {
+      const b = backup.readBackup(p);
+      // Save the current state first, so a restore can itself be undone.
+      backup.createBackup(dataDir(), path.join(backupDir(), `geri-yukleme-oncesi-${backup.stamp()}${backup.EXT}`), app.getVersion());
+      if (engine) { engine.quit(); engine = null; }
+      backup.restoreBackup(dataDir(), b);
+      log.info('Yedek geri yüklendi:', p);
+      setTimeout(() => win && win.reload(), 300);
+      return { ok: true };
+    } catch (e) { log.error('Geri yükleme başarısız:', e); return { error: e.message }; }
+  });
+  ipcMain.handle('backup:now', () => { try { return backup.autoBackup(dataDir(), backupDir(), app.getVersion(), { force: true }); } catch (e) { log.error('Yedek alınamadı:', e); return { error: e.message }; } });
+  ipcMain.handle('backup:chooseDir', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Otomatik yedek klasörü', properties: ['openDirectory', 'createDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const s = readJson('settings', {}); s.backupDir = r.filePaths[0]; writeJson('settings', s);
+    return r.filePaths[0];
+  });
+  ipcMain.handle('backup:resetDir', () => { const s = readJson('settings', {}); delete s.backupDir; writeJson('settings', s); return backupDir(); });
+  ipcMain.handle('backup:openDir', () => { fs.mkdirSync(backupDir(), { recursive: true }); return shell.openPath(backupDir()); });
+
+  // ---------- exchange files ----------
+  ipcMain.handle('file:save', async (_e, kind, defaultName, data) => {
+    const k = KINDS[kind];
+    if (!k) return null;
+    const r = await saveDialog(k.label, path.join(app.getPath('desktop'), `${defaultName}.${k.ext}`), [{ name: k.label, extensions: [k.ext] }]);
+    if (r.canceled || !r.filePath) return null;
+    backup.writeGzJson(r.filePath, { ...data, format: 'koroglu-' + kind });
+    return r.filePath;
+  });
+  ipcMain.handle('file:open', async (_e, kind) => {
+    const k = KINDS[kind];
+    const r = await dialog.showOpenDialog(win, { title: k.label, properties: ['openFile', 'multiSelections'], filters: [{ name: k.label, extensions: [k.ext] }] });
+    if (r.canceled) return [];
+    return r.filePaths.map(readExchange);
+  });
+  ipcMain.handle('app:takeFiles', () => pendingFiles.splice(0).map(readExchange));
+
+  // ---------- updates ----------
+  ipcMain.handle('update:state', () => updater.getState());
+  ipcMain.handle('update:check', () => { updater.check(); return true; });
+  ipcMain.handle('update:install', () => { updater.install(); return true; });
+
   createWindow();
+  win.webContents.on('did-finish-load', notifyFiles);
+  updater.init((s) => { if (win && !win.isDestroyed()) win.webContents.send('update:state', s); });
+
+  // Daily automatic backup (a little after start, so it never slows down opening the app).
+  setTimeout(() => {
+    try { const r = backup.autoBackup(dataDir(), backupDir(), app.getVersion()); if (r) log.info('Otomatik yedek:', r.path); }
+    catch (e) { log.error('Otomatik yedek alınamadı:', e); }
+  }, 15000).unref();
 });
 
 app.on('window-all-closed', () => { if (engine) engine.quit(); app.quit(); });

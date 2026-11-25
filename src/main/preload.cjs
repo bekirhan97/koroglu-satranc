@@ -5,6 +5,8 @@ ipcRenderer.on('engine:info', (_e, id, lines) => { const s = streams.get(id); if
 ipcRenderer.on('engine:done', (_e, id, res) => { const s = streams.get(id); if (s) { streams.delete(id); s.resolve(res); } });
 let sid = 0;
 
+const listen = (channel) => (fn) => { const f = (_e, ...a) => fn(...a); ipcRenderer.on(channel, f); return () => ipcRenderer.removeListener(channel, f); };
+
 contextBridge.exposeInMainWorld('api', {
   read: (name, fallback) => ipcRenderer.invoke('store:read', name, fallback),
   write: (name, data) => ipcRenderer.invoke('store:write', name, data),
@@ -26,4 +28,26 @@ contextBridge.exposeInMainWorld('api', {
   engineInfo: () => ipcRenderer.invoke('engine:info'),
   appInfo: () => ipcRenderer.invoke('app:info'),
   openDataDir: () => ipcRenderer.invoke('app:openDataDir'),
+
+  log: (level, msg) => ipcRenderer.invoke('log:write', level, msg),
+  saveErrorReport: () => ipcRenderer.invoke('log:saveReport'),
+
+  backupExport: () => ipcRenderer.invoke('backup:export'),
+  backupPick: () => ipcRenderer.invoke('backup:pick'),
+  backupList: () => ipcRenderer.invoke('backup:list'),
+  backupRestore: (p) => ipcRenderer.invoke('backup:restore', p),
+  backupNow: () => ipcRenderer.invoke('backup:now'),
+  backupChooseDir: () => ipcRenderer.invoke('backup:chooseDir'),
+  backupResetDir: () => ipcRenderer.invoke('backup:resetDir'),
+  backupOpenDir: () => ipcRenderer.invoke('backup:openDir'),
+
+  saveFile: (kind, name, data) => ipcRenderer.invoke('file:save', kind, name, data),
+  openFiles: (kind) => ipcRenderer.invoke('file:open', kind),
+  takeFiles: () => ipcRenderer.invoke('app:takeFiles'),
+  onFilesWaiting: listen('app:filesWaiting'),
+
+  updateState: () => ipcRenderer.invoke('update:state'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateInstall: () => ipcRenderer.invoke('update:install'),
+  onUpdateState: listen('update:state'),
 });

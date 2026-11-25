@@ -4,10 +4,12 @@
   --ink: #1f2430;
   --muted: #6b6f7a;
   --line: #e3ddd2;
-  --side: #1d2330;
-  --side-ink: #c9cdd6;
-  --accent: #b5462b;
-  --accent-2: #8f3420;
+  --side: #17110f;
+  --side-ink: #d8cec2;
+  --accent: #7a1426;
+  --accent-2: #5a0d1b;
+  --gold: #d9a84b;
+  --gold-2: #b88a33;
   --good: #2f8f4e;
   --great: #1f7a8c;
   --ok: #6f9a3a;
@@ -29,13 +31,14 @@ input, select { font: inherit; }
 .shell { display: flex; height: 100vh; }
 .sidebar { width: 268px; background: var(--side); color: var(--side-ink); display: flex; flex-direction: column; padding: 16px 10px; gap: 2px; flex-shrink: 0; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; }
+.brand-logo { width: 58px; height: 58px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
 .brand-mark { width: 40px; height: 40px; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 24px; }
-.brand-name { font-weight: 700; font-size: 18px; color: #fff; letter-spacing: .3px; }
+.brand-name { font-weight: 800; font-size: 19px; color: var(--gold); letter-spacing: .5px; }
 .brand-sub { font-size: 12px; opacity: .7; text-transform: uppercase; letter-spacing: 2px; }
 .nav-sep { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; opacity: .5; padding: 14px 10px 6px; }
 .nav-item { white-space: nowrap; display: flex; align-items: center; gap: 10px; background: none; border: 0; color: inherit; padding: 9px 10px; border-radius: 8px; text-align: left; }
 .nav-item:hover { background: rgba(255,255,255,.06); }
-.nav-item.active { background: rgba(255,255,255,.12); color: #fff; }
+.nav-item.active { background: rgba(217,168,75,.14); color: #fff; box-shadow: inset 3px 0 0 var(--gold); }
 .nav-icon { width: 22px; text-align: center; font-size: 17px; }
 .soon { margin-left: auto; font-size: 10px; background: rgba(255,255,255,.12); padding: 2px 6px; border-radius: 10px; }
 .nav-fill { flex: 1; }
@@ -317,3 +320,14 @@ textarea.paste { width: 100%; font-family: Consolas, Menlo, monospace; font-size
 .tn.current { background: #f3e4dc; }
 .lv { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 3px; vertical-align: middle; background: #ccc; }
 .lv.l1, .lv.l2 { background: var(--poor); } .lv.l3, .lv.l4 { background: var(--avg); } .lv.l5, .lv.l6 { background: var(--ok); } .lv.l7, .lv.l8 { background: var(--good); }
+
+/* ---------- 0.3: settings, backups, updates ---------- */
+.backup-list { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+table.kv.backups td { padding: 3px 6px 3px 0; text-align: left; }
+table.kv.backups td:last-child { text-align: right; }
+.update-box { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.update-banner { position: fixed; top: 14px; right: 18px; z-index: 150; display: flex; align-items: center; gap: 12px;
+  background: var(--side); color: #fff; border: 1px solid var(--gold-2); padding: 8px 10px 8px 14px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+.update-banner .icon-btn { color: #fff; }
+.set-row .btn { white-space: nowrap; }
+.set-row .btn-row { flex-wrap: nowrap; display: flex; gap: 6px; }
