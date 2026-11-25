@@ -1,0 +1,306 @@
+// Köroğlu Öğrenci Sistemi (web): giriş, kabuk, ana sayfa, ayarlar, ödev ve rapor eşitleme.
+// The training modules are the desktop app's own code; window.api (./api.js) stores their data in Supabase.
+import './api.js'; // must come first: modules read window.api when they load
+import 'chessground/assets/chessground.base.css';
+import 'chessground/assets/chessground.cburnett.css';
+import '../../src/renderer/styles.css';
+import './web.css';
+import { supa, hesap, usernameToEmail, cleanUsername } from './supa.js';
+import { loadUserData, flushAll, onSaveState } from './api.js';
+import { h, clear, modal, toast, fmtDate } from '../../src/renderer/core/dom.js';
+import { store, newProfile, ensureRatings } from '../../src/renderer/core/store.js';
+import { activity, goalProgress, streak, GOAL_KINDS } from '../../src/renderer/core/activity.js';
+import { assignments, importPackage, assignmentProgress, buildReport } from '../../src/renderer/core/assign.js';
+import { refreshBadges } from '../../src/renderer/core/badges.js';
+import { pdata } from '../../src/renderer/modules/puzzles/data.js';
+import puzzles from '../../src/renderer/modules/puzzles/index.js';
+import teacher from '../../src/renderer/modules/teacher/index.js';
+import { mountExam } from '../../src/renderer/modules/exam/index.js';
+import { accountsHooks, syncReports } from './coach.js';
+import brandLogo from '../../src/renderer/assets/brand.png';
+
+const app = document.getElementById('app');
+let me = null;          // profiles row of the signed-in user
+let mounted = null;
+let activeId = 'home';
+teacher.title = 'Antrenör';
+const MODULES = [puzzles, teacher];
+const visibleModules = () => MODULES.filter((m) => !m.teacherOnly || (me && me.role === 'coach'));
+
+// ---------- login ----------
+async function showLogin() {
+  clear(app);
+  let hasCoach = true;
+  try { hasCoach = (await hesap('durum')).hasCoach; } catch (e) { /* offline: show login anyway */ }
+  if (!hasCoach) return showSetup();
+  const user = h('input.big-input', { placeholder: 'Kullanıcı adı', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false' });
+  const pass = h('input.big-input', { type: 'password', placeholder: 'Şifre', autocomplete: 'current-password' });
+  const err = h('div.login-err');
+  const btn = h('button.btn.primary.big', 'Giriş yap');
+  const submit = async (e) => {
+    e && e.preventDefault();
+    err.textContent = '';
+    if (!user.value.trim() || !pass.value) { err.textContent = 'Kullanıcı adı ve şifre girin.'; return; }
+    btn.disabled = true; btn.textContent = 'Giriş yapılıyor…';
+    const { error } = await supa.auth.signInWithPassword({ email: usernameToEmail(user.value), password: pass.value });
+    btn.disabled = false; btn.textContent = 'Giriş yap';
+    if (error) { err.textContent = /invalid/i.test(error.message) ? 'Kullanıcı adı ya da şifre yanlış.' : 'Giriş yapılamadı: ' + error.message; return; }
+    start();
+  };
+  app.append(h('div.login-page', h('form.login-card', { onsubmit: submit },
+    h('img.login-logo', { src: brandLogo, alt: '' }),
+    h('h1', 'Köroğlu Satranç'), h('div.login-sub', 'Öğrenci Sistemi'),
+    user, pass, err, btn,
+    h('p.muted.small', 'Hesabınızı antrenörünüz açar. Şifrenizi unuttuysanız antrenörünüze sorun.'))));
+  setTimeout(() => user.focus(), 50);
+}
+
+function showSetup() {
+  const name = h('input.big-input', { placeholder: 'Adınız Soyadınız' });
+  const user = h('input.big-input', { placeholder: 'Kullanıcı adı (örn. bekir)', autocapitalize: 'off', spellcheck: 'false' });
+  const pass = h('input.big-input', { type: 'password', placeholder: 'Şifre (en az 6 karakter)', autocomplete: 'new-password' });
+  const pass2 = h('input.big-input', { type: 'password', placeholder: 'Şifre (tekrar)', autocomplete: 'new-password' });
+  const err = h('div.login-err');
+  const btn = h('button.btn.primary.big', 'Antrenör hesabını oluştur');
+  const submit = async (e) => {
+    e.preventDefault(); err.textContent = '';
+    if (pass.value !== pass2.value) { err.textContent = 'Şifreler aynı değil.'; return; }
+    btn.disabled = true;
+    try {
+      const r = await hesap('kurulum', { display_name: name.value, username: user.value, password: pass.value });
+      const { error } = await supa.auth.signInWithPassword({ email: usernameToEmail(r.username), password: pass.value });
+      if (error) throw error;
+      toast('Antrenör hesabınız hazır!', 'ok');
+      start();
+    } catch (x) { err.textContent = x.message; btn.disabled = false; }
+  };
+  clear(app).append(h('div.login-page', h('form.login-card', { onsubmit: submit },
+    h('img.login-logo', { src: brandLogo, alt: '' }),
+    h('h1', 'İlk kurulum'), h('div.login-sub', 'Antrenör hesabı'),
+    h('p.muted.small', 'Sistemde henüz hesap yok. Önce kendi antrenör hesabınızı oluşturun; öğrenci hesaplarını sonra siz açacaksınız. Bu ekran yalnızca bir kez çıkar.'),
+    name, user, pass, pass2, err, btn)));
+  setTimeout(() => name.focus(), 50);
+}
+
+// ---------- after login ----------
+async function start() {
+  clear(app).append(h('div.login-page', h('div.empty', 'Yükleniyor…')));
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) return showLogin();
+  const { data: prof } = await supa.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  if (!prof) { await supa.auth.signOut(); toast('Bu hesabın profili bulunamadı. Antrenörünüzle görüşün.', 'error'); return showLogin(); }
+  me = prof;
+  try { await loadUserData(user.id); } catch (e) { clear(app).append(h('div.login-page', h('div.empty', 'Veriler yüklenemedi: ' + e.message))); return; }
+  await store.load();
+  if (!store.profile) store.profile = newProfile(me.display_name);
+  store.profile.id = me.id;                 // the account id identifies the student everywhere
+  store.profile.name = me.display_name;     // the coach owns the name
+  ensureRatings(store.profile);
+  store.saveProfile();
+  store.settings.teacherMode = me.role === 'coach';
+  await Promise.all([pdata.load(), activity.load(), assignments.load()]);
+  window.webHooks = me.role === 'coach' ? accountsHooks(me) : null;
+  if (me.role === 'student') { await syncAssignments(); scheduleReport(5000); }
+  if (me.role === 'coach') await syncReports();
+  go('home');
+}
+
+// Student: assignments targeted at me that are not imported yet.
+async function syncAssignments() {
+  const { data, error } = await supa.from('assignments').select('id, package, created_at').order('created_at');
+  if (error) return;
+  await assignments.load();
+  let added = 0;
+  for (const row of data) {
+    if (assignments.list.some((a) => a.id === row.id)) continue;
+    try { const r = await importPackage(row.package); if (!r.duplicate) { added++; toast(`Yeni ödev: ${row.package.title}`, 'ok'); } } catch (e) { console.error(e); }
+  }
+  if (added) await pdata.load();
+  return added;
+}
+
+// Student: the progress report the coach sees (same content as the desktop .krapor file).
+let reportTimer = null;
+function scheduleReport(delay = 30000) {
+  if (!me || me.role !== 'student') return;
+  clearTimeout(reportTimer);
+  reportTimer = setTimeout(sendReport, delay);
+}
+async function sendReport() {
+  try {
+    const r = await buildReport();
+    const { error } = await supa.from('reports').upsert({ student_id: me.id, report: r, updated_at: new Date().toISOString() });
+    if (error) console.error('Rapor gönderilemedi', error);
+  } catch (e) { console.error(e); }
+}
+window.addEventListener('activity-changed', () => scheduleReport());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && reportTimer) { clearTimeout(reportTimer); reportTimer = null; sendReport(); } });
+
+// ---------- shell ----------
+function nav() {
+  const item = (id, icon, title) => h('button.nav-item' + (activeId === id ? '.active' : ''), { onclick: () => go(id) }, h('span.nav-icon', icon), h('span.nav-label', title));
+  return h('aside.sidebar',
+    h('div.brand', h('img.brand-logo', { src: brandLogo, alt: '' }), h('div', h('div.brand-name', 'Köroğlu'), h('div.brand-sub', 'Satranç Akademi'))),
+    item('home', '⌂', 'Ana Sayfa'),
+    h('div.nav-sep', 'Çalışma'),
+    visibleModules().map((m) => item(m.id, m.icon, m.title)),
+    h('div.nav-fill'),
+    item('settings', '⚙', 'Ayarlar'),
+    h('div.profile-chip', me.display_name, h('div.muted.small', me.role === 'coach' ? 'Antrenör' : `@${me.username}`)),
+    saveDot);
+}
+const saveDot = h('div.save-state');
+onSaveState(({ pending, errors }) => {
+  saveDot.textContent = errors ? '⚠ Kaydedilemedi, tekrar denenecek' : pending ? 'Kaydediliyor…' : '';
+  saveDot.className = 'save-state' + (errors ? ' err' : '');
+});
+
+function layout(content) { clear(app).append(h('div.shell', nav(), h('main.main', content))); }
+
+function go(id) {
+  if (mounted && mounted.unmount) mounted.unmount();
+  mounted = null;
+  activeId = id;
+  const content = h('div.content');
+  layout(content);
+  window.scrollTo(0, 0);
+  if (id === 'home') return renderHome(content);
+  if (id === 'settings') return renderSettings(content);
+  if (id.startsWith('exam:')) {
+    const a = assignments.list.find((x) => x.id === id.slice(5));
+    if (!a || !a.exam) return renderHome(content);
+    mountExam(content, { assignment: a, go }).then((r) => { if (activeId === id) mounted = r; else r.unmount(); });
+    return;
+  }
+  const m = MODULES.find((x) => x.id === id);
+  if (!m) return renderHome(content);
+  const res = m.mount(content, { go });
+  if (res && res.then) res.then((r) => { if (activeId === id) mounted = r; else if (r && r.unmount) r.unmount(); });
+  else mounted = res;
+}
+window.goTo = (id) => go(id);
+
+async function renderHome(root) {
+  await Promise.all([activity.load(), assignments.load()]);
+  const today = h('div.today');
+  const asgHost = h('div.asg-host');
+  const badgeHost = h('div.badge-host');
+  root.append(h('div.home',
+    h('div.hero', h('div', h('h1', `Hoş geldin, ${me.display_name.split(' ')[0]}`), h('p.muted', me.role === 'coach' ? 'Öğrencilerin ve ödevler Antrenör bölümünde.' : 'Bugün ne çalışmak istersin?')),
+      me.role === 'coach' ? h('div.hero-actions', h('button.btn.primary', { onclick: () => go('teacher') }, 'Öğrencilerim')) : null),
+    me.role === 'student' ? today : null,
+    asgHost, badgeHost,
+    h('div.module-grid', visibleModules().map((m) => h('button.module-card', { onclick: () => go(m.id) },
+      h('div.mc-icon', m.icon), h('div.mc-title', m.id === 'teacher' ? 'Antrenör' : m.title),
+      h('div.mc-desc', m.id === 'teacher' ? 'Öğrenci hesapları, ödev verme ve öğrencilerin ilerlemesi.' : 'Antrenman, Storm, Rush, Streak, tekrar ve tema analizi. Puanınıza uygun bulmacalar.'),
+      m.homeInfo ? infoSlot(m) : null)))));
+  if (me.role === 'student') { renderToday(today); renderAssignments(asgHost); renderBadges(badgeHost); }
+}
+
+function infoSlot(m) {
+  const el = h('div.mc-foot');
+  Promise.resolve(m.homeInfo()).then((t) => { el.textContent = t || ''; }).catch(() => {});
+  return el;
+}
+
+async function renderBadges(host) {
+  const { list, fresh } = await refreshBadges();
+  for (const b of fresh) toast(`${b.icon} Yeni rozet: ${b.name}!`, 'ok');
+  const earned = list.filter((b) => b.earned).length;
+  clear(host).append(h('div.panel.badges-panel',
+    h('div.panel-title', 'Rozetler', h('span.muted.small', ` ${earned}/${list.length}`)),
+    h('div.badge-grid', list.map((b) => h('div.badge' + (b.earned ? '.earned' : ''),
+      { title: `${b.name}: ${b.desc}` + (b.earned ? ` ✓ (${fmtDate(b.earnedAt)})` : ` – ${Math.min(b.current, b.goal)}/${b.goal}`) },
+      h('div.badge-icon', b.icon), h('div.badge-name', b.name),
+      b.earned ? null : h('div.badge-bar', h('span', { style: { width: `${Math.round(100 * b.progress)}%` } })))))));
+}
+
+function renderToday(host) {
+  const goal = assignments.goal();
+  const day = activity.day();
+  const gp = goalProgress(goal, day);
+  const st = streak(activity.days, goal);
+  const fire = h('div.streak' + (st.todayDone ? '.done' : ''), h('div.streak-n', st.current), h('div.streak-l', 'günlük seri'),
+    h('div.muted.small', st.todayDone ? 'Bugün tamam ✓' : st.current ? 'Seriyi bugün de sürdür' : 'Bugün başla'));
+  const goalBox = gp
+    ? h('div.goal-box', h('div.goal-title', gp.met ? '🎯 Bugünün hedefi tamamlandı!' : '🎯 Bugünün hedefi', goal.from === 'teacher' ? h('span.muted.small', ` · ${goal.teacher || 'antrenör'} belirledi`) : null),
+      gp.items.map((i) => h('div.goal-item' + (i.done >= i.target ? '.met' : ''),
+        h('span.gi-label', i.label), h('span.gi-track', h('span', { style: { width: `${(100 * i.done) / i.target}%` } })), h('span.gi-num', `${i.raw}/${i.target}`))))
+    : h('div.goal-box.empty-goal', h('div.goal-title', '🎯 Günlük hedef yok'),
+      h('p.muted.small', 'Antrenörünüz ödevle bir hedef verebilir ya da Ayarlar\'dan kendiniz belirleyebilirsiniz.'),
+      h('button.btn.small', { onclick: () => go('settings') }, 'Hedef belirle'),
+      h('div.muted.small', `Bugün: ${(day.puzzles || 0) + (day.reviews || 0)} bulmaca`));
+  clear(host).append(fire, goalBox);
+}
+window.addEventListener('activity-changed', () => { const t = document.querySelector('.today'); if (t && activeId === 'home') renderToday(t); });
+
+async function renderAssignments(host) {
+  const list = assignments.list.slice().sort((a, b) => (a.due || 9e15) - (b.due || 9e15));
+  if (!list.length) return;
+  const rows = [];
+  for (const a of list) {
+    const pr = await assignmentProgress(a);
+    if (pr.complete && a.due && Date.now() - a.due > 14 * 86400e3) continue;
+    const dueTxt = a.due ? (pr.overdue ? `süresi geçti (${fmtDate(a.due)})` : `son gün ${fmtDate(a.due)}`) : '';
+    rows.push(h('div.asg' + (pr.complete ? '.complete' : pr.overdue ? '.overdue' : ''),
+      h('div.asg-main', h('div.asg-title', a.title, pr.complete ? h('span.chip.ok', 'Tamamlandı') : null),
+        h('div.muted.small', [a.teacher ? `${a.teacher}` : null, dueTxt].filter(Boolean).join(' · ')),
+        a.note ? h('div.asg-note', a.note) : null,
+        h('div.asg-parts', pr.parts.map((x) => x.kind === 'exam'
+            ? h('button.asg-part.exam' + (x.done ? '.done' : ''), { onclick: () => go('exam:' + a.id) }, x.done ? `📝 ${x.label} · sonuç` : '📝 Sınava gir')
+            : h('button.asg-part', { onclick: () => go(x.kind === 'sets' ? 'puzzles' : 'home') }, `${x.done}/${x.total} ${x.label}`)),
+          (a.links || []).map((l) => h('button.asg-part.lichess', { title: l.url, onclick: () => window.api.openExternal(l.url) }, '♞ ', l.title, ' ↗')))),
+      h('div.asg-pct', h('div.ring', { style: { '--p': Math.round(100 * pr.pct) } }, h('span', `%${Math.round(100 * pr.pct)}`)))));
+  }
+  if (rows.length) clear(host).append(h('div.panel.asg-panel', h('div.panel-title', 'Ödevlerim'), rows));
+}
+
+async function renderSettings(root) {
+  const s = store.settings;
+  await assignments.load();
+  const tg = assignments.goal();
+  const teacherGoal = tg && tg.from === 'teacher' ? tg : null;
+  const row = (label, control, hint) => h('div.set-row', h('div', h('div.set-label', label), hint ? h('div.muted.small', hint) : null), control);
+  const save = () => { store.saveSettings(); toast('Kaydedildi', 'ok'); };
+  root.append(h('div.module', h('div.module-head', h('h2', 'Ayarlar')),
+    h('div.settings',
+      h('div.panel', h('div.panel-title', 'Hesap'),
+        row('Ad', h('span', me.display_name), me.role === 'student' ? 'Adınızı antrenörünüz değiştirebilir.' : null),
+        row('Kullanıcı adı', h('span', '@' + me.username)),
+        row('Şifre', h('button.btn.small', { onclick: changePassword }, 'Şifremi değiştir')),
+        row('Çıkış', h('button.btn.small', { onclick: logout }, 'Çıkış yap'), 'Ortak kullanılan bir cihazdaysanız çıkış yapmayı unutmayın.')),
+      me.role === 'student' ? h('div.panel',
+        h('div.panel-title', 'Günlük hedef'),
+        teacherGoal ? h('p.muted.small', `Şu an ${teacherGoal.teacher || 'antrenörünüzün'} ödevle belirlediği hedef geçerli. Aşağıdaki kendi hedefiniz, antrenör hedefi olmadığında kullanılır.`)
+          : h('p.muted.small', 'Her gün yapmak istediğiniz çalışma. Hedefi tutturduğunuz her gün seriye eklenir.'),
+        h('div.goal-grid', GOAL_KINDS.filter(([k]) => k === 'puzzles').map(([k, , label]) => h('label', h('input.goal-in', { type: 'number', min: 0, max: 200, value: (s.dailyGoal || {})[k] || 0,
+          onchange: (e) => { s.dailyGoal = { ...(s.dailyGoal || {}), [k]: Math.max(0, +e.target.value || 0) }; save(); } }), h('span', label))))) : null,
+      h('div.panel', h('div.panel-title', 'Görünüm'),
+        row('Türkçe notasyon (Ş V K F A)', h('input', { type: 'checkbox', checked: s.turkishNotation !== false, onchange: (e) => { s.turkishNotation = e.target.checked; save(); } }))))));
+}
+
+function changePassword() {
+  const p1 = h('input.big-input', { type: 'password', placeholder: 'Yeni şifre (en az 6 karakter)', autocomplete: 'new-password' });
+  const p2 = h('input.big-input', { type: 'password', placeholder: 'Yeni şifre (tekrar)', autocomplete: 'new-password' });
+  modal({ title: 'Şifre değiştir', body: h('div.form-col', p1, p2), actions: [{ label: 'Vazgeç' }, { label: 'Kaydet', primary: true, onClick: () => {
+    if (p1.value.length < 6) { toast('Şifre en az 6 karakter olmalı', 'error'); return false; }
+    if (p1.value !== p2.value) { toast('Şifreler aynı değil', 'error'); return false; }
+    supa.auth.updateUser({ password: p1.value }).then(({ error }) => toast(error ? 'Değiştirilemedi: ' + error.message : 'Şifreniz değişti', error ? 'error' : 'ok'));
+  } }] });
+}
+
+async function logout() {
+  await flushAll();
+  if (me && me.role === 'student') await sendReport();
+  await supa.auth.signOut();
+  location.reload();
+}
+
+window.addEventListener('error', (e) => console.error(e.message));
+
+(async function boot() {
+  const { data } = await supa.auth.getSession();
+  if (data.session) start(); else showLogin();
+})();
+
+export { cleanUsername };

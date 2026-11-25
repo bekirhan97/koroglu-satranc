@@ -35,7 +35,7 @@ export class PuzzleSolver {
     this.btns = h('div.controls');
     clear(this.root).append(h('div.pz-layout',
       h('div.gtm-center', this.header || null, this.boardHost, this.btns),
-      h('div.pz-side', this.statusHost, this.infoHost, this.solutionHost, this.live.button, this.live.el)));
+      h('div.pz-side', this.statusHost, this.infoHost, this.solutionHost, window.api.web ? null : this.live.button, window.api.web ? null : this.live.el)));
     this.board = new Board(this.boardHost, { orientation: this.solver === 'w' ? 'white' : 'black', onMove: (m) => this.onUserMove(m) });
     this.board.setPosition(this.p.fen, { animate: false });
     this.start = Date.now();

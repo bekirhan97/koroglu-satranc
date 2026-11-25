@@ -7,6 +7,7 @@ import { pdata, pickPuzzle, themeCounts, parsePuzzlePgn, recordResult, dueReview
 import { LEVEL_NAMES } from '../../core/srs.js';
 import { showStorm } from './storm.js';
 import { showMyGames } from './mygames.js';
+import { showRush, showStreak } from './rush.js';
 import { PuzzleSolver } from './solver.js';
 import { THEME_GROUPS, themeName } from './themes.js';
 
@@ -28,7 +29,7 @@ export default {
     clear(root).append(h('div.module', h('div.module-head', h('h2', this.title), tabsHost), body));
     const swap = (v) => { if (current && current.destroy) current.destroy(); current = v; };
     const setTabs = (active) => clear(tabsHost).append(...[
-      ['train', 'Antrenman', showTrain], ['storm', '⚡ Storm', showStormTab], ['mine', 'Oyunlarım', showMineTab], ['review', 'Tekrar', showReview], ['themes', 'Temalar', showThemes], ['sets', 'Setlerim', showSets], ['stats', 'İstatistikler', showStats],
+      ['train', 'Antrenman', showTrain], ['storm', '⚡ Storm', showStormTab], ['rush', '🏃 Rush', showRushTab], ['streak', '🔥 Streak', showStreakTab], ...(window.api.web ? [] : [['mine', 'Oyunlarım', showMineTab]]), ['review', 'Tekrar', showReview], ['themes', 'Temalar', showThemes], ['sets', 'Setlerim', showSets], ['stats', 'İstatistikler', showStats],
     ].map(([k, l, f]) => h('button.tab' + (active === k ? '.active' : ''), { onclick: f }, l,
       k === 'review' && dueReviews().length ? h('span.count', dueReviews().length) : null)),
     pill);
@@ -73,6 +74,15 @@ export default {
     function showStormTab() {
       setTabs('storm'); swap(null);
       showStorm(body, { setActive: (stop) => swap({ destroy: stop }) });
+    }
+
+    function showRushTab() {
+      setTabs('rush'); swap(null);
+      showRush(body, { setActive: (stop) => swap({ destroy: stop }) });
+    }
+    function showStreakTab() {
+      setTabs('streak'); swap(null);
+      showStreak(body, { setActive: (stop) => swap({ destroy: stop }) });
     }
 
     function showMineTab() {

@@ -48,14 +48,23 @@ export default {
     clear(root).append(h('div.module', h('div.module-head', h('h2', this.title), tabsHost), body));
     const setTabs = (active, extra) => clear(tabsHost).append(
       h('button.tab' + (active === 'students' ? '.active' : ''), { onclick: showStudents }, 'Öğrencilerim'),
-      h('button.tab' + (active === 'package' ? '.active' : ''), { onclick: showPackage }, 'Ödev paketi hazırla'),
+      window.webHooks ? h('button.tab' + (active === 'accounts' ? '.active' : ''), { onclick: showAccounts }, 'Hesaplar') : null,
+      h('button.tab' + (active === 'package' ? '.active' : ''), { onclick: showPackage }, window.webHooks ? 'Ödev ver' : 'Ödev paketi hazırla'),
       ...(extra ? [h('button.tab.active', extra)] : []));
+
+    // ---------- accounts (web only) ----------
+    function showAccounts() {
+      setTabs('accounts');
+      window.webHooks.accountsTab(body);
+    }
 
     // ---------- students ----------
     function showStudents() {
       setTabs('students');
       const list = Object.values(students.map).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
-      const importBtn = h('button.btn.primary', { onclick: async () => { const fs = await api.openFiles('rapor'); if (fs.length) { await importReports(fs); showStudents(); } } }, '+ Rapor içe aktar');
+      const importBtn = window.webHooks
+        ? h('button.btn', { onclick: async () => { await window.webHooks.syncReports(); showStudents(); toast('Güncellendi', 'ok'); } }, '↻ Yenile')
+        : h('button.btn.primary', { onclick: async () => { const fs = await api.openFiles('rapor'); if (fs.length) { await importReports(fs); showStudents(); } } }, '+ Rapor içe aktar');
       const rows = list.map((s) => {
         const r = s.last;
         const prev = s.reports.length > 1 ? s.reports[s.reports.length - 2] : null;
@@ -73,10 +82,15 @@ export default {
           h('td', asg == null ? h('span.muted', '–') : h('div.mini-progress', h('span', { style: { width: pct(asg) } }), h('b', pct(asg)))));
       });
       clear(body).append(h('div.sets-page',
-        h('div.toolbar', importBtn, h('span.muted', 'Öğrencileriniz Ana Sayfa\'daki "Rapor gönder" düğmesiyle bir .krapor dosyası oluşturup size gönderir. Dosyayı buraya ekleyin ya da çift tıklayın.')),
+        h('div.toolbar', importBtn, h('span.muted', window.webHooks ? 'Öğrencilerin çalışmaları siz bir şey yapmadan buraya gelir (öğrenci siteyi kullandıkça güncellenir).' : 'Öğrencileriniz Ana Sayfa\'daki "Rapor gönder" düğmesiyle bir .krapor dosyası oluşturup size gönderir. Dosyayı buraya ekleyin ya da çift tıklayın.')),
         list.length ? h('div.table-host', h('table.games.students',
           h('thead', h('tr', h('th', 'Öğrenci'), h('th', 'Bulmaca puanı'), h('th', 'Tahmin Et puanı'), h('th', 'Seri'), h('th', 'Son 7 gün'), h('th', 'Zayıf temalar'), h('th', 'Ödevler'))),
           h('tbody', rows)))
+          : window.webHooks ? h('div.empty', h('div.big-icon', '🎓'), h('h3', 'Henüz çalışan öğrenci yok'),
+            h('p', '1. "Hesaplar" sekmesinden öğrencilerinize hesap açın.'),
+            h('p', '2. "Ödev ver" sekmesinden ödev hazırlayıp öğrencilere gönderin.'),
+            h('p', '3. Öğrenciler siteye girip çalıştıkça ilerlemeleri burada görünür.'),
+            h('button.btn.primary', { onclick: showAccounts }, 'Hesaplar'))
           : h('div.empty', h('div.big-icon', '🎓'), h('h3', 'Henüz öğrenci raporu yok'),
             h('p', '1. "Ödev paketi hazırla" sekmesinden bir paket hazırlayıp öğrencilerinize gönderin.'),
             h('p', '2. Öğrencileriniz çalıştıktan sonra Ana Sayfa\'dan "Rapor gönder" ile size .krapor dosyası yollar.'),
@@ -99,7 +113,7 @@ export default {
         h('div.toolbar', h('button.btn.small', { onclick: showStudents }, '◂ Öğrencilerim'), h('span.spacer'),
           h('span.muted', `Rapor: ${fmtDate(r.createdAt)} · uygulama ${r.appVersion}`),
           h('button.btn.small.primary', { onclick: () => parentReport(s) }, 'Veli raporu (PDF)'),
-          h('button.btn.small.ghost', { onclick: () => modal({ title: 'Öğrenci silinsin mi?', body: h('p', `${s.name} ve tüm raporları bu bilgisayardan silinecek.`),
+          window.webHooks ? null : h('button.btn.small.ghost', { onclick: () => modal({ title: 'Öğrenci silinsin mi?', body: h('p', `${s.name} ve tüm raporları bu bilgisayardan silinecek.`),
             actions: [{ label: 'Vazgeç' }, { label: 'Sil', primary: true, onClick: async () => { await students.remove(id); showStudents(); } }] }) }, 'Sil')),
         h('div.cards',
           h('div.card', h('div.card-k', 'Bulmaca puanı'), h('div.card-v', r.ratings.puzzles.r), h('div.muted', `${pz.total} bulmaca · %${pz.total ? Math.round((100 * pz.ok) / pz.total) : 0} doğru`)),
@@ -177,8 +191,8 @@ export default {
             f.links.length ? h('li', `${f.links.length} Lichess bağlantısı`) : null,
             f.exam.on ? h('li', `Sınav (${f.exam.minutes} dk)`) : null,
             !nGames && !nPz && !f.reps.size && !f.links.length ? h('li.muted', 'Henüz içerik seçilmedi') : null),
-          h('button.btn.primary.big', { onclick: save }, 'Paketi kaydet…'),
-          h('p.muted.small', 'Kaydettiğiniz .kpaket dosyasını öğrencilerinize WhatsApp, e-posta ya da USB ile gönderin. Öğrenci dosyaya çift tıklayınca ödev uygulamasına eklenir.'));
+          h('button.btn.primary.big', { onclick: save }, api.web ? 'Öğrencilere gönder…' : 'Paketi kaydet…'),
+          h('p.muted.small', api.web ? 'Sonraki adımda ödevin hangi öğrencilere (ya da gruplara) gideceğini seçersiniz. Öğrenci siteye girdiğinde ödevi Ana Sayfa\'da görür.' : 'Kaydettiğiniz .kpaket dosyasını öğrencilerinize WhatsApp, e-posta ya da USB ile gönderin. Öğrenci dosyaya çift tıklayınca ödev uygulamasına eklenir.'));
       };
       const check = (set, id, label, sub) => h('label.pick', h('input', { type: 'checkbox', checked: set.has(id), onchange: (e) => { e.target.checked ? set.add(id) : set.delete(id); refresh(); } }), h('span', label), sub ? h('span.muted.small', sub) : null);
 
@@ -226,11 +240,11 @@ export default {
                 numIn(e.pz.count, (v) => { e.pz.count = Math.max(0, Math.min(50, v)); }), h('span.muted', 'soru,'), numIn(e.pz.min, (v) => { e.pz.min = v; }), h('span.muted', '–'), numIn(e.pz.max, (v) => { e.pz.max = v; }), h('span.muted', 'puan')]
               : [sel([['', 'Set seçin'], ...pdata.sets.filter((s) => !s.assignment).map((s) => [s.id, `${s.name} (${s.puzzles.length})`])], e.pz.setId, (v) => { e.pz.setId = v; }),
                 numIn(e.pz.count, (v) => { e.pz.count = Math.max(1, v); }), h('span.muted', 'soru')]),
-          h('div.form-l', 'Hamleyi Tahmin Et'),
-          h('div.theme-row', sel([['', 'Yok'], ...analysed.map((g) => [g.id, `${g.headers.White} – ${g.headers.Black}`])], e.gtmGameId, (v) => { e.gtmGameId = v; }),
+          api.web ? null : h('div.form-l', 'Hamleyi Tahmin Et'),
+          api.web ? null : h('div.theme-row', sel([['', 'Yok'], ...analysed.map((g) => [g.id, `${g.headers.White} – ${g.headers.Black}`])], e.gtmGameId, (v) => { e.gtmGameId = v; }),
             h('span.muted.small', analysed.length ? 'İlk 5 hamle sorulmaz, en fazla 25 hamle.' : 'Önce Hamleyi Tahmin Et\'te "Önceden analiz et" ile bir oyun hazırlayın.')),
-          h('div.form-l', 'Açılış soruşturması'),
-          h('div.theme-row', sel([['', 'Yok'], ...odata.reps.filter((r) => !r.assignment).map((r) => [r.id, r.name])], e.repId, (v) => { e.repId = v; }),
+          api.web ? null : h('div.form-l', 'Açılış soruşturması'),
+          api.web ? null : h('div.theme-row', sel([['', 'Yok'], ...odata.reps.filter((r) => !r.assignment).map((r) => [r.id, r.name])], e.repId, (v) => { e.repId = v; }),
             numIn(e.openingCount, (v) => { e.openingCount = Math.max(1, Math.min(40, v)); }), h('span.muted', 'pozisyon')));
       };
 
@@ -250,6 +264,12 @@ export default {
           gtmGameId: f.exam.gtmGameId, repId: f.exam.repId, openingCount: f.exam.openingCount } : null });
         if (f.exam.on && !pkg.exam) { toast('Sınava soru eklenemedi: bulmaca, oyun ya da repertuvar seçin', 'error'); return; }
         const noAnalysis = pkg.gtm.games.length - Object.keys(pkg.gtm.analysis).length;
+        if (window.webHooks) {
+          if (!(await window.webHooks.sendPackage(pkg))) return;
+          await sentPackages.add(pkg);
+          showPackage();
+          return;
+        }
         const path = await api.saveFile('paket', title.replace(/[\\/:*?"<>|]/g, '-'), pkg);
         if (!path) return;
         await sentPackages.add(pkg);
@@ -268,7 +288,7 @@ export default {
           h('div.panel', h('div.panel-title', '2. Günlük hedef'),
             h('p.muted.small', 'Öğrencinin her gün yapmasını istediğiniz çalışma. 0 bırakılan madde hedefe girmez. Bu paket öğrencinin önceki günlük hedefinin yerine geçer.'),
             h('div.goal-grid', GOAL_KINDS.map(([k, , label]) => h('label', num(k), h('span', label))))),
-          h('div.panel', h('div.panel-title', '3. Hamleyi Tahmin Et oyunları'),
+          api.web ? null : h('div.panel', h('div.panel-title', '3. Hamleyi Tahmin Et oyunları'),
             h('p.muted.small', 'Analizi yapılmış oyunlar ("zorluk" yazanlar) analiziyle birlikte gider; öğrenci beklemeden oynar.'), gamesBox),
           h('div.panel', h('div.panel-title', '4. Bulmacalar'),
             pdata.sets.length ? h('div.pick-list', pdata.sets.filter((s) => !s.assignment).map((s) => check(f.sets, s.id, s.name, `${s.puzzles.length} bulmaca`))) : h('div.muted.small', 'PGN bulmaca setiniz yok (Bulmacalar → Setlerim).'),
@@ -276,7 +296,7 @@ export default {
             h('p.muted.small', 'Seçtiğiniz temadan, verdiğiniz puan aralığında, kolaydan zora sıralı bulmacalar seçilir. Bütün öğrenciler aynı bulmacaları çözer.'),
             themeRows,
             h('button.btn.small', { onclick: () => { f.themeSets.push({ theme: 'fork', name: 'Çatal seçkisi', count: 15, min: 1000, max: 1600 }); drawThemes(); refresh(); } }, '+ Tema seçkisi ekle')),
-          h('div.panel', h('div.panel-title', '5. Açılış repertuvarları'),
+          api.web ? null : h('div.panel', h('div.panel-title', '5. Açılış repertuvarları'),
             odata.reps.filter((r) => !r.assignment).length ? h('div.pick-list', odata.reps.filter((r) => !r.assignment).map((r) => check(f.reps, r.id, r.name, `${r.color === 'w' ? 'Beyaz' : 'Siyah'} · ${r.lines} çizgi`))) : h('div.muted.small', 'Repertuvarınız yok (Açılış Tekrarı → Repertuvar İçe Aktar).')),
           h('div.panel', h('div.panel-title', '6. Lichess turnuvası / takımı'),
             h('p.muted.small', 'Hafta sonu turnuvası, takım ya da çalışma (study) bağlantısı ekleyin. Öğrenci ödevin içinden tek tıkla açar.'),

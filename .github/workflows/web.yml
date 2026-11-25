@@ -1,0 +1,35 @@
+# Öğrenci Sistemi (web) → GitHub Pages
+name: Web (Öğrenci Sistemi)
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'src/renderer/**', 'resources/puzzles.json', 'scripts/build-web.mjs', 'package.json', '.github/workflows/web.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: node scripts/build-web.mjs --minify
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: web/dist }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

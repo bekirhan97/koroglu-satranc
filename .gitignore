@@ -4,3 +4,4 @@ out/
 resources/engines/
 scratch/
 *.log
+web/dist/
