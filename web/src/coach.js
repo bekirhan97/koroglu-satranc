@@ -17,7 +17,7 @@ export async function syncReports() {
 }
 
 async function myStudents() {
-  const { data, error } = await supa.from('profiles').select('id, username, display_name, group_name, created_at').eq('role', 'student').order('display_name');
+  const { data, error } = await supa.from('profiles').select('id, username, display_name, group_name, created_at, leaderboard_ok').eq('role', 'student').order('display_name');
   if (error) throw error;
   return data;
 }
@@ -43,12 +43,16 @@ export function accountsHooks(me) {
           h('button.btn.primary', { onclick: () => createDialog(groups, redraw) }, '+ Öğrenci hesabı aç'),
           h('span.muted', `${list.length} öğrenci`, groups.length ? ` · ${groups.length} grup` : '')),
         list.length ? h('div.table-host', h('table.games.accounts',
-          h('thead', h('tr', h('th', 'Öğrenci'), h('th', 'Kullanıcı adı'), h('th', 'Grup'), h('th', 'Son çalışma'), h('th', ''))),
+          h('thead', h('tr', h('th', 'Öğrenci'), h('th', 'Kullanıcı adı'), h('th', 'Grup'), h('th', 'Son çalışma'), h('th', { title: 'Veli açık rıza formunda sıralamayı onayladıysa işaretleyin' }, 'Sıralamada'), h('th', ''))),
           h('tbody', list.map((s) => h('tr',
             h('td', h('b', s.display_name), h('div.sub', `açıldı ${fmtDate(s.created_at)}`)),
             h('td', '@' + s.username),
             h('td', s.group_name || h('span.muted', '–')),
             h('td', lastReport[s.id] ? fmtDate(lastReport[s.id]) : h('span.muted', 'henüz yok')),
+            h('td', h('input', { type: 'checkbox', checked: !!s.leaderboard_ok, title: 'Veli sıralama onayı verdi', onchange: async (e) => {
+              const { error } = await supa.rpc('set_leaderboard_ok', { student: s.id, ok: e.target.checked });
+              if (error) { toast(error.message, 'error'); e.target.checked = !e.target.checked; } else toast(e.target.checked ? `${s.display_name} sıralamada görünecek` : `${s.display_name} sıralamadan çıkarıldı`, 'ok');
+            } })),
             h('td.acc-actions',
               h('button.btn.small', { onclick: () => editDialog(s, groups, redraw) }, 'Düzenle'),
               h('button.btn.small', { onclick: () => passwordDialog(s) }, 'Şifre'),
@@ -139,7 +143,7 @@ export function accountsHooks(me) {
       try { rows = await fetchLeaderboard(); } catch (e) { clear(body).append(h('div.empty', 'Sıralama alınamadı: ' + e.message)); return; }
       const groups = [...new Set(rows.map((r) => r.group_name || 'Grupsuz'))].sort((a, b) => a.localeCompare(b, 'tr'));
       clear(body).append(h('div.sets-page',
-        h('p.muted', 'Öğrenciler kendi gruplarının sıralamasını görür (adlar "Ahmet Y." şeklinde kısaltılır). Siz bütün grupları görürsünüz.'),
+        h('p.muted', 'Öğrenciler kendi gruplarının sıralamasını görür (adlar "Ahmet Y." şeklinde kısaltılır). Yalnızca velisi onay veren öğrenciler sıralamada yer alır: Hesaplar → "Sıralamada" sütunu.'),
         h('div.lb-grid', groups.map((g) => leaderboardView(rows.filter((r) => (r.group_name || 'Grupsuz') === g), { title: g, limit: 50, compact: true })))));
     },
 

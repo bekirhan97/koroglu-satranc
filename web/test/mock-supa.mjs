@@ -83,9 +83,10 @@ export function createMock() {
       if (uname) db.lichess_accounts.push({ user_id: uid, coach_id: me.role === 'coach' ? me.id : me.coach_id, display_name: me.display_name, username: uname });
       return json(route, 204);
     }
+    if (p === '/rest/v1/rpc/set_leaderboard_ok') { const b = JSON.parse(req.postData() || '{}'); const st = db.profiles.find((x) => x.id === b.student); st.leaderboard_ok = b.ok; return json(route, 204); }
     if (p === '/rest/v1/rpc/leaderboard') {
       const uid = userFromReq(req); const me = db.profiles.find((x) => x.id === uid);
-      const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === (me.role === 'coach' ? me.id : me.coach_id) && (me.role === 'coach' || x.group_name === me.group_name));
+      const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === (me.role === 'coach' ? me.id : me.coach_id) && (me.role === 'coach' || x.group_name === me.group_name) && (x.leaderboard_ok || x.id === uid));
       return json(route, 200, team.map((t) => { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; const days = r ? r.activity.days.slice(-7) : [];
         return { name: t.display_name.split(' ')[0] + ' ' + t.display_name.split(' ').pop()[0] + '.', is_me: t.id === uid, group_name: t.group_name, week_puzzles: days.reduce((a, d) => a + (d.puzzles || 0) + (d.reviews || 0), 0), streak: r ? r.activity.streak.current : 0, rating: r ? r.ratings.puzzles.r : 1500 }; }));
     }

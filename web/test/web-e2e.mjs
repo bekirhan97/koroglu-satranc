@@ -144,7 +144,10 @@ await c.fill('textarea.paste', 'Bu cumartesi ders yok. Pazar 14:00\'te Lichess t
 await c.click('button.btn.primary:text-is("Duyur")'); await c.waitForTimeout(1500);
 await shot(c, '07b-duyurular');
 // a second student with a report, so the leaderboard has someone to compare with
-const sid2 = MOCK.addUser('test.ayse', 'x123456', { role: 'student', display_name: 'Ayşe Yılmaz', coach_id: MOCK.db.profiles[0].id, group_name: 'Cumartesi 10:00' });
+const sid2 = MOCK.addUser('test.ayse', 'x123456', { role: 'student', display_name: 'Ayşe Yılmaz', coach_id: MOCK.db.profiles[0].id, group_name: 'Cumartesi 10:00', leaderboard_ok: true });
+await c.click('.tab:has-text("Hesaplar")'); await c.waitForTimeout(1500);
+await c.locator('table.accounts tbody tr:has-text("Şükrü") input[type=checkbox]').check(); await c.waitForTimeout(800);
+console.log('  sıralama onayı:', MOCK.db.profiles.find((x) => x.username === studentUser).leaderboard_ok);
 MOCK.db.reports.push({ student_id: sid2, report: { activity: { days: [{ key: '2026-11-25', puzzles: 12 }], streak: { current: 3 } }, ratings: { puzzles: { r: 1620 } } } });
 
 // ---------- student ----------
