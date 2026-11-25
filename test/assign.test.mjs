@@ -73,7 +73,7 @@ test('öğrenci paketi içe aktarır, çalışır, rapor hazırlar', async () =>
   assert.equal(report.assignments[0].title, 'Hafta 1');
   assert.equal(report.gtm.played, 1);
   assert.equal(report.puzzles.reviewTotal, 1, 'yanlış set bulmacası tekrara girdi');
-  assert.equal(report.activity.days.length, 56);
+  assert.equal(report.activity.days.length, 70);
   assert.equal(report.openings[0].learned, 5);
 });
 

@@ -264,3 +264,15 @@ table.lb tr.me td { background: #fff3d6; font-weight: 700; }
 .alert-row { display: flex; flex-direction: column; }
 .alert-row.hidden { display: none; }
 .push-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* Study report */
+.study-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.study-note { margin-bottom: 10px; }
+.study-scroll { overflow-x: auto; }
+.study-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.study-table th, .study-table td { text-align: right; padding: 6px 8px; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.study-table th:first-child, .study-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel); }
+.study-table th.sortable { cursor: pointer; user-select: none; }
+.study-table th.sorted { color: var(--accent); }
+.study-table tfoot td { border-top: 2px solid var(--line); }
+.study-table tr.no-report td { opacity: .6; }

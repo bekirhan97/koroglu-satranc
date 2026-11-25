@@ -288,7 +288,7 @@ export async function buildReport() {
     openings: reps,
     gtm: { games: gtmGames.slice(0, 40), played: gtmGames.length },
     play: { ...res, total: playGames.length, recent: playGames.slice(-10).reverse().map((g) => ({ t: g.t, opp: g.opp, result: g.result, side: g.userColor, reason: g.reason, tc: g.tc || null })) },
-    activity: { days: lastDays(activity.days, 56), streak: streak(activity.days, goal), goal },
+    activity: { days: lastDays(activity.days, 70), streak: streak(activity.days, goal), goal },
     assignments: asg,
     badges: await api.read('badges', {}),
     exams: await api.read('exams', {}),

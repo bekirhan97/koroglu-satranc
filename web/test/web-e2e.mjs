@@ -456,6 +456,18 @@ await tc.locator('.modal button:has-text("Vazgeç")').click().catch(() => {});
 await nav(tc, 'Antrenör'); await tc.waitForTimeout(2000); await shot(tc, '35-ipad-antrenor');
 console.log('  ipad antrenör taşma:', await tc.evaluate(() => document.documentElement.scrollWidth - window.innerWidth));
 
+step('çalışma raporu');
+await nav(c, 'Antrenör'); await c.waitForTimeout(1500);
+await c.click('.tab:has-text("Çalışmalar")'); await c.waitForTimeout(3000);
+console.log('  satır:', await c.locator('.study-table tbody tr').count(), '·', (await c.locator('.study-table tbody tr').first().textContent()).replace(/\s+/g, ' '));
+console.log('  toplam:', (await c.locator('.study-table tfoot tr').first().textContent()).replace(/\s+/g, ' '));
+await shot(c, '37-calisma-raporu');
+await c.selectOption('.study-bar select >> nth=0', 'd30'); await c.waitForTimeout(1500);
+await c.click('.study-bar .seg button:has-text("Grup grup")'); await c.waitForTimeout(500);
+console.log('  grup görünümü:', (await c.locator('.study-table tbody').textContent()).replace(/\s+/g, ' ').slice(0, 200));
+await shot(c, '38-calisma-raporu-grup');
+const dl = c.waitForEvent('download'); await c.click('.study-bar button:has-text("Excel")'); console.log('  csv:', (await dl).suggestedFilename());
+
 step('bildirim tetikleri');
 const kinds = MOCK.pushes.filter((b) => b.action === 'gonder').map((b) => b.title + ' → ' + b.ids.length);
 console.log('  gönderilen bildirimler:', kinds.join(' | '));

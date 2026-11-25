@@ -50,6 +50,7 @@ export default {
       h('button.tab' + (active === 'students' ? '.active' : ''), { onclick: showStudents }, 'Öğrencilerim'),
       window.webHooks ? h('button.tab' + (active === 'accounts' ? '.active' : ''), { onclick: showAccounts }, 'Hesaplar') : null,
       window.webHooks ? h('button.tab' + (active === 'assignments' ? '.active' : ''), { onclick: () => { setTabs('assignments'); window.webHooks.assignmentsTab(body); } }, 'Ödevler') : null,
+      window.webHooks && window.webHooks.studyTab ? h('button.tab' + (active === 'study' ? '.active' : ''), { onclick: () => { setTabs('study'); window.webHooks.studyTab(body); } }, 'Çalışmalar') : null,
       window.webHooks ? h('button.tab' + (active === 'announcements' ? '.active' : ''), { onclick: () => { setTabs('announcements'); window.webHooks.announcementsTab(body); } }, 'Duyurular') : null,
       window.webHooks && window.webHooks.isHead ? h('button.tab' + (active === 'coaches' ? '.active' : ''), { onclick: () => { setTabs('coaches'); window.webHooks.coachesTab(body); } }, 'Antrenörler') : null,
       window.webHooks ? h('button.tab' + (active === 'leaderboard' ? '.active' : ''), { onclick: () => { setTabs('leaderboard'); window.webHooks.leaderboardTab(body); } }, 'Sıralama') : null,

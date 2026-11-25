@@ -24,6 +24,7 @@ import lichessPlay, { live } from './lichess-play.js';
 import { loadOpenings } from '../../src/renderer/core/openings.js';
 import { startErrorLog, recentErrors } from './errlog.js';
 import { coachAlerts } from './alerts.js';
+import { studyTab } from './study.js';
 import { pushState, enablePush, disablePush, forgetDevice } from './push.js';
 import { startLink, finishLink, getLink, unlink, lichessSummary, ensureRegistered, playToken, forgetPlay } from './lichess.js';
 import teacher from '../../src/renderer/modules/teacher/index.js';
@@ -129,6 +130,7 @@ async function start() {
   store.settings.teacherMode = me.role === 'coach';
   await Promise.all([pdata.load(), activity.load(), assignments.load()]);
   window.webHooks = me.role === 'coach' ? accountsHooks(me) : null;
+  if (window.webHooks) window.webHooks.studyTab = studyTab;
   loadOpenings().catch(() => {});
   const lr = await finishLink();
   if (lr && lr.error) toast(lr.error, 'error');
