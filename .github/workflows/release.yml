@@ -4,10 +4,19 @@
 # Every package is launched once in self-test mode on its own operating system before upload.
 name: Sürüm
 
+# Start a release by pushing a branch named release/v0.3.0 (or a tag v0.3.0, or "Run workflow").
 on:
   push:
     tags: ['v*']
+    branches: ['release/v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Sürüm etiketi (ör. v0.3.0 ya da deneme için v0.3.0-rc1)'
+        required: true
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 permissions:
   contents: write
@@ -17,6 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Sürüm etiketi
+        shell: bash
+        run: echo "TAG=${TAG#release/}" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
@@ -27,20 +39,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Sürüm etiketi
+        shell: bash
+        run: echo "TAG=${TAG#release/}" >> "$GITHUB_ENV"
       - name: Sürüm sayfasını oluştur
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
           if [ -f "docs/surum-notlari/${TAG}.md" ]; then NOTES="docs/surum-notlari/${TAG}.md"; else echo "Köroğlu Satranç ${TAG}" > /tmp/n.md; NOTES=/tmp/n.md; fi
           PRE=""; case "$TAG" in *-*) PRE="--prerelease";; esac
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" $PRE --title "Köroğlu Satranç ${TAG#v}" --notes-file "$NOTES"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" $PRE --target "$GITHUB_SHA" --title "Köroğlu Satranç ${TAG#v}" --notes-file "$NOTES"
 
   windows:
     needs: release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Sürüm etiketi
+        shell: bash
+        run: echo "TAG=${TAG#release/}" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
@@ -76,13 +93,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
-        run: gh release upload "${GITHUB_REF_NAME}" out/*-Windows-Setup.exe out/*-Windows-Setup.exe.blockmap out/latest.yml --clobber
+        run: gh release upload "$TAG" out/*-Windows-Setup.exe out/*-Windows-Setup.exe.blockmap out/latest.yml --clobber
 
   mac:
     needs: release
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - name: Sürüm etiketi
+        shell: bash
+        run: echo "TAG=${TAG#release/}" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
@@ -114,4 +134,4 @@ jobs:
       - name: Yükle
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF_NAME}" out/*-Mac-*.zip out/latest-mac.yml --clobber
+        run: gh release upload "$TAG" out/*-Mac-*.zip out/latest-mac.yml --clobber
