@@ -33,7 +33,8 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           if [ -f "docs/surum-notlari/${TAG}.md" ]; then NOTES="docs/surum-notlari/${TAG}.md"; else echo "Köroğlu Satranç ${TAG}" > /tmp/n.md; NOTES=/tmp/n.md; fi
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Köroğlu Satranç ${TAG#v}" --notes-file "$NOTES"
+          PRE=""; case "$TAG" in *-*) PRE="--prerelease";; esac
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" $PRE --title "Köroğlu Satranç ${TAG#v}" --notes-file "$NOTES"
 
   windows:
     needs: release

@@ -1,4 +1,4 @@
-Köroğlu Satranç – Köroğlu Satranç Akademi
+﻿Köroğlu Satranç – Köroğlu Satranç Akademi
 
 Bu program özgür yazılımdır: GNU Genel Kamu Lisansı sürüm 3 (GPL-3.0) ya da
 (tercihinize göre) daha sonraki bir sürümün koşulları altında dağıtabilir ve/veya
