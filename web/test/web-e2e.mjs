@@ -138,6 +138,15 @@ await shot(c, '07-kime');
 await c.click('.modal button:has-text("Hepsi")');
 await c.click('.modal button:has-text("Gönder")'); await c.waitForTimeout(3000);
 
+step('duyuru gönder');
+await c.click('.tab:has-text("Duyurular")'); await c.waitForSelector('.panel-title:has-text("Yeni duyuru")'); await c.waitForTimeout(300);
+await c.fill('textarea.paste', 'Bu cumartesi ders yok. Pazar 14:00\'te Lichess turnuvası var!');
+await c.click('button.btn.primary:text-is("Duyur")'); await c.waitForTimeout(1500);
+await shot(c, '07b-duyurular');
+// a second student with a report, so the leaderboard has someone to compare with
+const sid2 = MOCK.addUser('test.ayse', 'x123456', { role: 'student', display_name: 'Ayşe Yılmaz', coach_id: MOCK.db.profiles[0].id, group_name: 'Cumartesi 10:00' });
+MOCK.db.reports.push({ student_id: sid2, report: { activity: { days: [{ key: '2026-11-25', puzzles: 12 }], streak: { current: 3 } }, ratings: { puzzles: { r: 1620 } } } });
+
 // ---------- student ----------
 step('öğrenci girişi');
 const s = await newPage({ width: 390, height: 844 });
@@ -151,7 +160,7 @@ await s.fill('input[placeholder="Şifre"]', studentPass);
 await s.click('button:has-text("Giriş yap")');
 await s.waitForSelector('.home', { timeout: 20000 }); await s.waitForTimeout(2500);
 await shot(s, '09-ogrenci-ana-telefon');
-console.log('  ödev görünüyor:', await s.locator('.asg-title').count());
+console.log('  ödev görünüyor:', await s.locator('.asg-title').count(), '· duyuru:', await s.locator('.ann-panel .ann-row').count(), '· sıralama:', await s.locator('.lb-panel').count(), '· kurulum kartı:', await s.locator('.install-card').count());
 
 step('video izle (telefon)');
 await s.click('.asg-part:has-text("video")'); await s.waitForTimeout(3000);
@@ -256,6 +265,21 @@ const rows = await c.locator('table.students tbody tr').count();
 console.log('  öğrenci satırı:', rows);
 if (rows) { await c.click('table.students tbody tr'); await c.waitForTimeout(1500); await shot(c, '19-ogrenci-detay');
   console.log('  lichess paneli:', await c.locator('.lichess-panel').count()); }
+
+step('antrenör: ödev takibi, sıralama, ödevi geri al');
+await c.click('.tab:has-text("Ödevler")'); await c.waitForTimeout(2000);
+await c.click('.asg-card button:has-text("Öğrenciler")'); await c.waitForTimeout(400);
+await shot(c, '20-odevler');
+await c.click('.tab:has-text("Sıralama")'); await c.waitForTimeout(1500);
+await shot(c, '21-siralama');
+await c.click('.tab:has-text("Ödevler")'); await c.waitForTimeout(1500);
+await c.click('.asg-card button:has-text("Geri al")'); await c.click('.modal button:has-text("Ödevi geri al")'); await c.waitForTimeout(1500);
+console.log('  kalan ödev kartı:', await c.locator('.asg-card').count());
+step('öğrenci tekrar girer: ödev kalkmış olmalı');
+await s.fill('input[placeholder="Kullanıcı adı"]', studentUser); await s.fill('input[placeholder="Şifre"]', studentPass);
+await s.click('button:has-text("Giriş yap")'); await s.waitForSelector('.home', { timeout: 20000 }); await s.waitForTimeout(2500);
+console.log('  öğrencide kalan ödev:', await s.locator('.asg-title').count());
+await shot(s, '22-ogrenci-odev-kalkti');
 
 console.log('\nHATALAR:', errors.length ? errors.join('\n') : 'yok');
 await browser.close();

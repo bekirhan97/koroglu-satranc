@@ -49,6 +49,9 @@ export default {
     const setTabs = (active, extra) => clear(tabsHost).append(
       h('button.tab' + (active === 'students' ? '.active' : ''), { onclick: showStudents }, 'Öğrencilerim'),
       window.webHooks ? h('button.tab' + (active === 'accounts' ? '.active' : ''), { onclick: showAccounts }, 'Hesaplar') : null,
+      window.webHooks ? h('button.tab' + (active === 'assignments' ? '.active' : ''), { onclick: () => { setTabs('assignments'); window.webHooks.assignmentsTab(body); } }, 'Ödevler') : null,
+      window.webHooks ? h('button.tab' + (active === 'announcements' ? '.active' : ''), { onclick: () => { setTabs('announcements'); window.webHooks.announcementsTab(body); } }, 'Duyurular') : null,
+      window.webHooks ? h('button.tab' + (active === 'leaderboard' ? '.active' : ''), { onclick: () => { setTabs('leaderboard'); window.webHooks.leaderboardTab(body); } }, 'Sıralama') : null,
       h('button.tab' + (active === 'package' ? '.active' : ''), { onclick: showPackage }, window.webHooks ? 'Ödev ver' : 'Ödev paketi hazırla'),
       ...(extra ? [h('button.tab.active', extra)] : []));
 

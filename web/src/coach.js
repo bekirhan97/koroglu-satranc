@@ -59,6 +59,90 @@ export function accountsHooks(me) {
       if (onChange) onChange(list);
     },
 
+    // ---------- "Ödevler": per-assignment progress, withdraw ----------
+    async assignmentsTab(body) {
+      clear(body).append(h('div.empty', 'Yükleniyor…'));
+      await syncReports();
+      const [{ data: asg, error }, list] = await Promise.all([
+        supa.from('assignments').select('id, title, created_at, package, assignment_targets(student_id)').eq('coach_id', me.id).order('created_at', { ascending: false }),
+        myStudents().catch(() => []),
+      ]);
+      if (error) { clear(body).append(h('div.empty', 'Ödevler alınamadı: ' + error.message)); return; }
+      const byId = Object.fromEntries(list.map((s) => [s.id, s]));
+      const redraw = () => this.assignmentsTab(body);
+      const card = (a) => {
+        const rows = a.assignment_targets.map((t) => {
+          const st = byId[t.student_id];
+          const rep = students.map[t.student_id] && students.map[t.student_id].last;
+          const pr = rep && rep.assignments ? rep.assignments.find((x) => x.id === a.id) : null;
+          return { name: st ? st.display_name : 'Silinmiş öğrenci', group: st && st.group_name, pr, seen: !!pr };
+        }).sort((x, y) => (y.pr ? y.pr.pct : -1) - (x.pr ? x.pr.pct : -1) || x.name.localeCompare(y.name, 'tr'));
+        const done = rows.filter((r) => r.pr && r.pr.pct >= 1).length;
+        const half = rows.filter((r) => r.pr && r.pr.pct > 0 && r.pr.pct < 1).length;
+        const none = rows.length - done - half;
+        const due = a.package.due;
+        const details = h('div.asg-detail', { style: { display: 'none' } },
+          h('table.kv.asg-students', rows.map((r) => h('tr',
+            h('td', h('b', r.name), r.group ? h('span.muted.small', ` · ${r.group}`) : null),
+            h('td', r.pr ? r.pr.parts.map((p) => `${p.done}/${p.total} ${p.label}`).join(' · ') : h('span.muted', r.seen ? '' : 'henüz açmadı')),
+            h('td', h('div.mini-progress', h('span', { style: { width: `${Math.round(100 * (r.pr ? r.pr.pct : 0))}%` } }), h('b', `%${Math.round(100 * (r.pr ? r.pr.pct : 0))}`)))))));
+        return h('div.panel.asg-card',
+          h('div.asg-card-head',
+            h('div', h('div.asg-title', a.title), h('div.muted.small', [`gönderildi ${fmtDate(a.created_at)}`, due ? `son gün ${fmtDate(due)}` : null, packageSummary(a.package).join(', ')].filter(Boolean).join(' · '))),
+            h('div.asg-counts', h('span.chip.ok', `${done} bitirdi`), h('span.chip', `${half} yarıda`), h('span.chip' + (none ? '.warn' : ''), `${none} başlamadı`))),
+          h('div.btn-row',
+            h('button.btn.small', { onclick: (e) => { const open = details.style.display === 'none'; details.style.display = open ? '' : 'none'; e.target.textContent = open ? 'Gizle' : `Öğrenciler (${rows.length})`; } }, `Öğrenciler (${rows.length})`),
+            h('button.btn.small.ghost', { onclick: () => modal({ title: 'Ödev geri alınsın mı?', body: h('div', h('p', h('b', a.title), ' ödevi silinecek.'), h('p', 'Öğrencilerin ödev listesinden de kalkar (siteye bir sonraki girişlerinde). Çözdükleri bulmacalar ve puanları silinmez.')),
+              actions: [{ label: 'Vazgeç' }, { label: 'Ödevi geri al', primary: true, onClick: () => {
+                supa.from('assignments').delete().eq('id', a.id).then(({ error: e }) => { if (e) toast(e.message, 'error'); else { toast('Ödev geri alındı', 'ok'); redraw(); } });
+              } }] }) }, 'Geri al')),
+          details);
+      };
+      clear(body).append(h('div.sets-page',
+        h('div.toolbar', h('button.btn', { onclick: redraw }, '↻ Yenile'), h('span.muted', 'İlerleme, öğrenci siteye girip çalıştıkça güncellenir.')),
+        asg.length ? asg.map(card) : h('div.empty', h('div.big-icon', '📋'), h('h3', 'Henüz ödev göndermediniz'), h('p', '"Ödev ver" sekmesinden ilk ödevi hazırlayın.'))));
+    },
+
+    // ---------- "Duyurular" ----------
+    async announcementsTab(body) {
+      const list = await myStudents().catch(() => []);
+      const groups = [...new Set(list.map((s) => s.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+      const { data: anns } = await supa.from('announcements').select('*').eq('coach_id', me.id).order('created_at', { ascending: false });
+      const text = h('textarea.paste', { rows: 3, maxlength: 1000, placeholder: 'Örn. Bu cumartesi ders yok. Pazar 14:00\'te Lichess takım turnuvası var!' });
+      const grp = h('select', h('option', { value: '' }, 'Herkes'), groups.map((g) => h('option', { value: g }, g)));
+      const dur = h('select', [[1, '1 gün'], [3, '3 gün'], [7, '1 hafta'], [30, '1 ay'], [0, 'Süresiz']].map(([v, l]) => h('option', { value: v, selected: v === 7 }, l)));
+      const redraw = () => this.announcementsTab(body);
+      const now = Date.now();
+      clear(body).append(h('div.sets-page',
+        h('div.panel', h('div.panel-title', 'Yeni duyuru'), text,
+          h('div.btn-row', h('span.muted', 'Kime:'), grp, h('span.muted', 'Ne kadar görünsün:'), dur, h('span.spacer'),
+            h('button.btn.primary', { onclick: async () => {
+              const t = text.value.trim();
+              if (!t) { toast('Duyuru metni yazın', 'error'); return; }
+              const days = +dur.value;
+              const { error } = await supa.from('announcements').insert({ body: t, group_name: grp.value || null, expires_at: days ? new Date(Date.now() + days * 86400e3).toISOString() : null });
+              if (error) toast('Gönderilemedi: ' + error.message, 'error'); else { toast('Duyuru gönderildi', 'ok'); redraw(); }
+            } }, 'Duyur'))),
+        h('div.panel', h('div.panel-title', 'Duyurular'),
+          (anns || []).length ? (anns || []).map((a) => {
+            const expired = a.expires_at && new Date(a.expires_at).getTime() < now;
+            return h('div.ann-row' + (expired ? '.expired' : ''),
+              h('div', h('div.ann-body', a.body), h('div.muted.small', [fmtDate(a.created_at), a.group_name || 'Herkes', a.expires_at ? (expired ? 'süresi doldu' : `${fmtDate(a.expires_at)} tarihine kadar`) : 'süresiz'].join(' · '))),
+              h('button.btn.small.ghost', { onclick: async () => { const { error } = await supa.from('announcements').delete().eq('id', a.id); if (error) toast(error.message, 'error'); else redraw(); } }, 'Sil'));
+          }) : h('div.muted.small', 'Henüz duyuru yok.'))));
+    },
+
+    // ---------- "Sıralama" ----------
+    async leaderboardTab(body) {
+      clear(body).append(h('div.empty', 'Yükleniyor…'));
+      let rows;
+      try { rows = await fetchLeaderboard(); } catch (e) { clear(body).append(h('div.empty', 'Sıralama alınamadı: ' + e.message)); return; }
+      const groups = [...new Set(rows.map((r) => r.group_name || 'Grupsuz'))].sort((a, b) => a.localeCompare(b, 'tr'));
+      clear(body).append(h('div.sets-page',
+        h('p.muted', 'Öğrenciler kendi gruplarının sıralamasını görür (adlar "Ahmet Y." şeklinde kısaltılır). Siz bütün grupları görürsünüz.'),
+        h('div.lb-grid', groups.map((g) => leaderboardView(rows.filter((r) => (r.group_name || 'Grupsuz') === g), { title: g, limit: 50, compact: true })))));
+    },
+
     // Called by the package builder instead of saving a .kpaket file.
     async sendPackage(pkg) {
       let list;
@@ -158,4 +242,33 @@ function deleteDialog(s, done) {
     actions: [{ label: 'Vazgeç' }, { label: 'Kalıcı olarak sil', primary: true, onClick: () => {
       hesap('ogrenci_sil', { id: s.id }).then(async () => { toast('Hesap silindi', 'ok'); await syncReports(); done(); }).catch((e) => toast(e.message, 'error'));
     } }] });
+}
+
+// ---------- shared: leaderboard (student home + coach tab) ----------
+export async function fetchLeaderboard() {
+  const { data, error } = await supa.rpc('leaderboard');
+  if (error) throw error;
+  return data || [];
+}
+const LB_KINDS = [['week_puzzles', 'Bu hafta bulmaca'], ['streak', 'Seri (gün)'], ['rating', 'Bulmaca puanı']];
+export function leaderboardView(rows, { title = 'Haftalık sıralama', limit = 10, compact = false } = {}) {
+  let kind = 'week_puzzles';
+  const host = h('div.panel.lb-panel');
+  const draw = () => {
+    const sorted = rows.slice().sort((a, b) => b[kind] - a[kind] || a.name.localeCompare(b.name, 'tr'));
+    let rank = 0, prev = null;
+    const ranked = sorted.map((r, i) => { if (r[kind] !== prev) { rank = i + 1; prev = r[kind]; } return { ...r, rank }; });
+    let shown = ranked.slice(0, limit);
+    const mine = ranked.find((r) => r.is_me);
+    if (mine && !shown.includes(mine)) shown = [...shown, mine];
+    const medal = (n) => (n === 1 ? '🥇' : n === 2 ? '🥈' : n === 3 ? '🥉' : n);
+    clear(host).append(
+      h('div.panel-title', title),
+      h('div.seg.lb-seg', LB_KINDS.map(([k, l]) => h('button' + (k === kind ? '.active' : ''), { onclick: () => { kind = k; draw(); } }, l))),
+      shown.length ? h('table.lb', shown.map((r) => h('tr' + (r.is_me ? '.me' : ''), h('td.lb-rank', medal(r.rank)), h('td', r.name, compact || !r.group_name ? null : h('span.muted.small', ` · ${r.group_name}`)), h('td.num', h('b', r[kind])))))
+        : h('div.muted.small', 'Henüz veri yok. Öğrenciler çalıştıkça sıralama oluşur.'),
+      h('div.muted.small', 'Sıralama, öğrencilerin siteye en son girdiği andaki çalışmalarına göre güncellenir.'));
+  };
+  draw();
+  return host;
 }

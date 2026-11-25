@@ -128,3 +128,26 @@
 .lp-status.win { background: #e6f4ea; color: var(--good); }
 .lp-status.loss { background: #fbeaea; color: var(--bad); }
 .lp-moves { display: flex; flex-wrap: wrap; gap: 4px 8px; max-height: 300px; overflow: auto; margin-top: 12px; font-size: 14px; }
+
+/* ---------- ödev takibi, duyurular, sıralama ---------- */
+.asg-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.asg-counts { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip.ok { background: #e6f4ea; color: var(--good); }
+.chip.warn { background: #fbeaea; color: var(--bad); }
+.asg-detail { margin-top: 8px; }
+.ann-panel { border-color: var(--gold); background: #fff8e8; }
+.ann-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ann-row:last-child { border-bottom: 0; }
+.ann-row.expired { opacity: .55; }
+.ann-body { white-space: pre-wrap; font-size: 15px; }
+.lb-seg { margin-bottom: 8px; flex-wrap: wrap; }
+table.lb { width: 100%; border-collapse: collapse; }
+table.lb td { padding: 6px 4px; border-bottom: 1px solid #f0ebe2; }
+table.lb tr.me td { background: #fff3d6; font-weight: 700; }
+.lb-rank { width: 36px; text-align: center; }
+.lb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.install-card { display: flex; align-items: center; gap: 12px; }
+.install-card img { width: 52px; height: 52px; border-radius: 12px; }
+.install-card > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.install-body { margin-top: 4px; }
+.settings .install-card { border: 0; padding: 0; margin: 0; }

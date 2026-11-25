@@ -4,11 +4,11 @@
 import crypto from 'node:crypto';
 
 export function createMock() {
-  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [] };
+  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [] };
   const users = new Map(); // email -> { id, password }
   const tokens = new Map(); // token -> user id
   const DOMAIN = 'kullanici.koroglu-satranc.app';
-  const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'] };
+  const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'] };
 
   function addUser(username, password, profile) {
     const id = crypto.randomUUID();
@@ -83,6 +83,12 @@ export function createMock() {
       if (uname) db.lichess_accounts.push({ user_id: uid, coach_id: me.role === 'coach' ? me.id : me.coach_id, display_name: me.display_name, username: uname });
       return json(route, 204);
     }
+    if (p === '/rest/v1/rpc/leaderboard') {
+      const uid = userFromReq(req); const me = db.profiles.find((x) => x.id === uid);
+      const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === (me.role === 'coach' ? me.id : me.coach_id) && (me.role === 'coach' || x.group_name === me.group_name));
+      return json(route, 200, team.map((t) => { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; const days = r ? r.activity.days.slice(-7) : [];
+        return { name: t.display_name.split(' ')[0] + ' ' + t.display_name.split(' ').pop()[0] + '.', is_me: t.id === uid, group_name: t.group_name, week_puzzles: days.reduce((a, d) => a + (d.puzzles || 0) + (d.reviews || 0), 0), streak: r ? r.activity.streak.current : 0, rating: r ? r.ratings.puzzles.r : 1500 }; }));
+    }
     // ---- PostgREST ----
     const m = p.match(/^\/rest\/v1\/(\w+)$/);
     if (!m || !db[m[1]]) return json(route, 404, { message: 'not found' });
@@ -96,6 +102,8 @@ export function createMock() {
       if (table === 'profiles') { const me = db.profiles.find((x) => x.id === uid); rows = rows.filter((r) => r.id === uid || r.coach_id === uid || (me && r.id === me.coach_id)); }
       if (table === 'assignments') rows = rows.filter((a) => a.coach_id === uid || db.assignment_targets.some((t) => t.assignment_id === a.id && t.student_id === uid));
       if (table === 'videos') { const me = db.profiles.find((x) => x.id === uid); rows = rows.filter((v) => v.coach_id === uid || (me && v.coach_id === me.coach_id)); }
+      if (table === 'announcements') { const me = db.profiles.find((x) => x.id === uid); rows = rows.filter((a) => a.coach_id === uid || (me && a.coach_id === me.coach_id && (!a.group_name || a.group_name === me.group_name))); }
+      if (table === 'assignments' && url.searchParams.get('select') && url.searchParams.get('select').includes('assignment_targets')) rows = rows.map((a) => ({ ...a, assignment_targets: db.assignment_targets.filter((t) => t.assignment_id === a.id).map((t) => ({ student_id: t.student_id })) }));
       if (table === 'lichess_accounts') { const me = db.profiles.find((x) => x.id === uid); const team = me && (me.role === 'coach' ? me.id : me.coach_id); rows = rows.filter((r) => r.user_id === uid || r.coach_id === team); }
       if (table === 'reports') rows = rows.filter((r) => r.student_id === uid || db.profiles.some((x) => x.id === r.student_id && x.coach_id === uid));
       if (single) return rows.length ? json(route, 200, rows[0]) : json(route, 406, { code: 'PGRST116', message: 'no rows' });
@@ -107,6 +115,7 @@ export function createMock() {
       const out = [];
       for (const row0 of body) {
         const row = { ...row0 };
+        if (table === 'announcements') { row.id = crypto.randomUUID(); row.coach_id = uid; row.created_at = new Date().toISOString(); }
         if (table === 'videos') { row.id = row.id || crypto.randomUUID(); row.coach_id = row.coach_id || uid; row.created_at = new Date().toISOString(); }
         if (table === 'assignments') row.created_at = new Date().toISOString();
         const keys = keyOf[table];

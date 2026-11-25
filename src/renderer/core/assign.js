@@ -166,6 +166,23 @@ export async function importPackage(pkg) {
   return { duplicate: false, items };
 }
 
+// The teacher withdrew an assignment (web): remove it and the material that came with it.
+export async function removeAssignment(id) {
+  await assignments.load();
+  const a = assignments.list.find((x) => x.id === id);
+  if (!a) return false;
+  assignments.list = assignments.list.filter((x) => x.id !== id);
+  await assignments.save();
+  await pdata.ensure();
+  const setIds = new Set(pdata.sets.filter((s) => s.assignment === id).map((s) => s.id));
+  if (setIds.size) { pdata.sets = pdata.sets.filter((s) => !setIds.has(s.id)); for (const k of setIds) delete pdata.progress[k]; await pdata.saveSets(); await pdata.saveProgress(); }
+  const games = store.games.filter((g) => g.assignment === id).length;
+  if (games) { store.games = store.games.filter((g) => g.assignment !== id); await store.saveGames(); }
+  await odata.load();
+  for (const r of odata.reps.filter((x) => x.assignment === id)) await odata.remove(r.id);
+  return true;
+}
+
 // Progress of one assignment: fraction done for each part and overall.
 export async function assignmentProgress(a) {
   await pdata.ensure();

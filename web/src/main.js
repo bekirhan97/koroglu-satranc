@@ -10,7 +10,7 @@ import { loadUserData, flushAll, onSaveState } from './api.js';
 import { h, clear, modal, toast, fmtDate } from '../../src/renderer/core/dom.js';
 import { store, newProfile, ensureRatings } from '../../src/renderer/core/store.js';
 import { activity, goalProgress, streak, GOAL_KINDS } from '../../src/renderer/core/activity.js';
-import { assignments, importPackage, assignmentProgress, buildReport } from '../../src/renderer/core/assign.js';
+import { assignments, importPackage, assignmentProgress, buildReport, removeAssignment } from '../../src/renderer/core/assign.js';
 import { refreshBadges } from '../../src/renderer/core/badges.js';
 import { pdata } from '../../src/renderer/modules/puzzles/data.js';
 import puzzles from '../../src/renderer/modules/puzzles/index.js';
@@ -23,8 +23,9 @@ import { loadOpenings } from '../../src/renderer/core/openings.js';
 import { startLink, finishLink, getLink, unlink, lichessSummary, ensureRegistered, playToken, forgetPlay } from './lichess.js';
 import teacher from '../../src/renderer/modules/teacher/index.js';
 import { mountExam } from '../../src/renderer/modules/exam/index.js';
-import { accountsHooks, syncReports } from './coach.js';
+import { accountsHooks, syncReports, fetchLeaderboard, leaderboardView } from './coach.js';
 import brandLogo from '../../src/renderer/assets/brand.png';
+import { installCard } from './install.js';
 
 const app = document.getElementById('app');
 let me = null;          // profiles row of the signed-in user
@@ -124,6 +125,10 @@ async function syncAssignments() {
   const { data, error } = await supa.from('assignments').select('id, package, created_at').order('created_at');
   if (error) return;
   await assignments.load();
+  // withdrawn by the coach (or no longer targeted at me)
+  const liveIds = new Set(data.map((r) => r.id));
+  for (const a of assignments.list.slice()) if (!liveIds.has(a.id)) await removeAssignment(a.id);
+  await assignments.load();
   let added = 0;
   for (const row of data) {
     if (assignments.list.some((a) => a.id === row.id)) continue;
@@ -222,13 +227,29 @@ async function renderHome(root) {
   const asgHost = h('div.asg-host');
   const badgeHost = h('div.badge-host');
   const lichessHost = h('div');
+  const annHost = h('div');
+  const lbHost = h('div');
+  if (me.role === 'student') {
+    Promise.all([supa.from('announcements').select('id, body, created_at').order('created_at', { ascending: false }), window.api.read('announcements/hidden', [])]).then(([{ data }, hidden]) => {
+      const list = (data || []).filter((a) => !hidden.includes(a.id));
+      if (!list.length) return;
+      annHost.append(h('div.panel.ann-panel', h('div.panel-title', '📢 Duyurular'), list.map((a) => {
+        const row = h('div.ann-row', h('div', h('div.ann-body', a.body), h('div.muted.small', fmtDate(a.created_at))),
+          h('button.icon-btn', { title: 'Okudum', onclick: async () => { const hd = await window.api.read('announcements/hidden', []); hd.push(a.id); await window.api.write('announcements/hidden', hd.slice(-200)); row.remove(); if (!annHost.querySelector('.ann-row')) annHost.replaceChildren(); } }, '✓'));
+        return row;
+      })));
+    }).catch(() => {});
+    fetchLeaderboard().then((rows) => { if (rows.length > 1) lbHost.append(leaderboardView(rows, { title: `🏆 Sıralama${me.group_name ? ' · ' + me.group_name : ''}`, compact: true })); }).catch(() => {});
+  }
   getLink().then((l) => { if (!l && me.role === 'student') lichessHost.append(h('div.panel.lichess-cta', h('div', h('b', '♞ Lichess hesabını bağla'), h('div.muted.small', 'Antrenörün Lichess puanını ve oyunlarını görsün, kendi oyunlarından bulmaca çıkaralım.')),
     h('button.btn.primary', { onclick: () => startLink() }, 'Lichess ile bağlan'))); });
   root.append(h('div.home',
     h('div.hero', h('div', h('h1', `Hoş geldin, ${me.display_name.split(' ')[0]}`), h('p.muted', me.role === 'coach' ? 'Öğrencilerin ve ödevler Antrenör bölümünde.' : 'Bugün ne çalışmak istersin?')),
       me.role === 'coach' ? h('div.hero-actions', h('button.btn.primary', { onclick: () => go('teacher') }, 'Öğrencilerim')) : null),
+    annHost,
+    localStorage.getItem('koroglu-kurulum-kapat') ? null : installCard({ onDismiss: () => localStorage.setItem('koroglu-kurulum-kapat', '1') }),
     me.role === 'student' ? today : null,
-    asgHost, lichessHost, badgeHost,
+    asgHost, lbHost, lichessHost, badgeHost,
     h('div.module-grid', visibleModules().map((m) => h('button.module-card', { onclick: () => go(m.id) },
       h('div.mc-icon', m.icon), h('div.mc-title', m.id === 'teacher' ? 'Antrenör' : m.title),
       h('div.mc-desc', m.id === 'teacher' ? 'Öğrenci hesapları, ödev verme, videolar ve öğrencilerin ilerlemesi.' : m.id === 'puzzles' ? 'Antrenman, Storm, Rush, Streak, kendi oyunlarından bulmaca, tekrar ve tema analizi.' : m.description),
@@ -324,6 +345,7 @@ async function renderSettings(root) {
           : h('p.muted.small', 'Her gün yapmak istediğiniz çalışma. Hedefi tutturduğunuz her gün seriye eklenir.'),
         h('div.goal-grid', GOAL_KINDS.filter(([k]) => k === 'puzzles').map(([k, , label]) => h('label', h('input.goal-in', { type: 'number', min: 0, max: 200, value: (s.dailyGoal || {})[k] || 0,
           onchange: (e) => { s.dailyGoal = { ...(s.dailyGoal || {}), [k]: Math.max(0, +e.target.value || 0) }; save(); } }), h('span', label))))) : null,
+      ((ic) => ic ? h('div.panel', h('div.panel-title', 'Uygulama'), ic) : null)(installCard()),
       h('div.panel', h('div.panel-title', 'Görünüm'),
         row('Türkçe notasyon (Ş V K F A)', h('input', { type: 'checkbox', checked: s.turkishNotation !== false, onchange: (e) => { s.turkishNotation = e.target.checked; save(); } }))))));
 }
