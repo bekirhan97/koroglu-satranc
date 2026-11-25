@@ -349,3 +349,12 @@ tr.guclu .ta-fill { background: var(--good); }
 .verdict { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #eee8dd; }
 tr.zayif .verdict { background: #f6d9d5; color: var(--bad); }
 tr.guclu .verdict { background: #d9efdf; color: var(--good); }
+
+/* ---------- 0.3: clock ---------- */
+.player-bar:has(.clock-face) { display: flex; align-items: center; justify-content: space-between; text-align: left; padding: 4px 4px 4px 16px; }
+.clock-face { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 20px; min-width: 92px; text-align: right; padding: 3px 12px; border-radius: 16px; background: rgba(127,127,127,.15); opacity: .65; }
+.clock-face.running { opacity: 1; background: var(--gold); color: #1b1208; }
+.clock-face.low { color: #fff; background: var(--bad); opacity: 1; }
+.player-bar.black .clock-face:not(.running):not(.low) { background: rgba(255,255,255,.12); }
+.tc-seg button { display: flex; flex-direction: column; align-items: center; line-height: 1.2; }
+label.chk.disabled { opacity: .45; }

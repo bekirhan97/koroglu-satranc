@@ -8,6 +8,26 @@ import { BoardEditor, START_FEN } from '../../core/editor.js';
 import { LivePanel } from '../../core/livePanel.js';
 import { cancel } from '../../core/engine.js';
 import { chooseMove, opponentName, MAIA_LEVELS, SF_LEVELS } from '../../core/opponents.js';
+import { activity } from '../../core/activity.js';
+
+// Time controls: base minutes + increment seconds. null = no clock.
+export const TIME_CONTROLS = [null, { base: 3, inc: 2 }, { base: 5, inc: 3 }, { base: 10, inc: 5 }, { base: 15, inc: 10 }];
+export const tcLabel = (tc) => (tc ? `${tc.base}+${tc.inc}` : 'Saatsiz');
+const tcKind = (tc) => (!tc ? '' : tc.base < 10 ? 'Hızlı' : 'Rapid');
+export function fmtClock(ms) {
+  ms = Math.max(0, ms);
+  if (ms < 10000) return (Math.floor(ms / 100) / 10).toFixed(1);
+  const s = Math.ceil(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+// Can this side still mate? (if not, running out of time is a draw for the other side)
+export function canMate(fen, color) {
+  const board = fen.split(' ')[0];
+  const mine = [...board].filter((c) => (color === 'w' ? /[PNBRQ]/.test(c) : /[pnbrq]/.test(c))).map((c) => c.toLowerCase());
+  if (mine.some((c) => c === 'p' || c === 'r' || c === 'q')) return true;
+  const minors = mine.filter((c) => c === 'n' || c === 'b').length;
+  return minors >= 2;
+}
 
 const api = window.api;
 const tr = () => store.settings.turkishNotation !== false;
@@ -37,7 +57,8 @@ export default {
     ].filter(([k, , f]) => f || active === k).map(([k, l, f]) => h('button.tab' + (active === k ? '.active' : ''), { onclick: f || (() => {}) }, l)));
 
     // remembered choices
-    const prefs = Object.assign({ opp: { kind: 'maia', elo: 1500, sample: false }, side: 'tomove', takeback: true }, store.settings.playPrefs || {});
+    const prefs = Object.assign({ opp: { kind: 'maia', elo: 1500, sample: false }, side: 'tomove', takeback: true, tc: { base: 10, inc: 5 } }, store.settings.playPrefs || {});
+    if (!('tc' in prefs)) prefs.tc = { base: 10, inc: 5 };
     const savePrefs = () => { store.settings.playPrefs = prefs; store.saveSettings(); };
 
     function showSetup() {
@@ -95,6 +116,18 @@ export default {
       const sideSeg = () => h('div.seg', [['tomove', 'Sırası gelen'], ['w', 'Beyaz'], ['b', 'Siyah'], ['random', 'Rastgele']].map(([v, l]) =>
         h('button' + (prefs.side === v ? '.active' : ''), { onclick: (e) => { prefs.side = v; e.target.parentNode.replaceWith(sideSeg()); } }, l)));
 
+      const tcNote = h('p.muted.small');
+      const takebackBox = h('input', { type: 'checkbox', checked: prefs.takeback, onchange: (e) => { prefs.takeback = e.target.checked; } });
+      const takebackRow = h('label.chk', { style: { marginTop: '10px' } }, takebackBox, 'Hamle geri almaya izin ver');
+      const syncTc = () => {
+        tcNote.textContent = prefs.tc ? `${tcKind(prefs.tc)}: ${prefs.tc.base} dakika, her hamlede +${prefs.tc.inc} saniye. Saat iki taraf da ilk hamlesini yapınca başlar. Saatli oyunlarda hamle geri alınamaz.` : 'Süre sınırı yok. Dilediğiniz kadar düşünebilirsiniz.';
+        takebackBox.disabled = !!prefs.tc; takebackRow.classList.toggle('disabled', !!prefs.tc);
+      };
+      const tcSeg = () => h('div.seg.wide.tc-seg', TIME_CONTROLS.map((tc) =>
+        h('button' + (tcLabel(prefs.tc) === tcLabel(tc) ? '.active' : ''), { onclick: (e) => { prefs.tc = tc; [...e.target.parentNode.children].forEach((b) => b.classList.toggle('active', b === e.target)); syncTc(); } },
+          tcLabel(tc), tc ? h('span.small.muted', ' ' + tcKind(tc)) : null)));
+      syncTc();
+
       const start = () => {
         let history;
         if (mode === 'start') history = [START_FEN];
@@ -112,7 +145,9 @@ export default {
         savePrefs();
         const game = {
           id: Date.now().toString(36), t: Date.now(), status: 'active',
-          startHistory: history, moves: [], userColor, opp: { ...prefs.opp }, takeback: prefs.takeback, result: null, reason: null,
+          startHistory: history, moves: [], userColor, opp: { ...prefs.opp }, takeback: prefs.tc ? false : prefs.takeback, result: null, reason: null,
+          tc: prefs.tc ? { ...prefs.tc } : null,
+          clock: prefs.tc ? { w: prefs.tc.base * 60000, b: prefs.tc.base * 60000 } : null,
         };
         pdata.games.push(game); pdata.save();
         showGame(game);
@@ -130,8 +165,8 @@ export default {
             posHost)),
         h('div.setup-right',
           h('div.panel', h('div.panel-title', 'Rakip'), oppHost),
-          h('div.panel', h('div.panel-title', 'Tarafınız'), sideSeg(),
-            h('label.chk', { style: { marginTop: '10px' } }, h('input', { type: 'checkbox', checked: prefs.takeback, onchange: (e) => { prefs.takeback = e.target.checked; } }), 'Hamle geri almaya izin ver')),
+          h('div.panel', h('div.panel-title', 'Süre'), tcSeg(), tcNote),
+          h('div.panel', h('div.panel-title', 'Tarafınız'), sideSeg(), takebackRow),
           h('button.btn.primary.big', { onclick: start }, 'Oyunu Başlat ▸'))));
       renderPos(); renderOpp();
       swap({ destroy: () => { if (editor) editor.destroy(); } });
@@ -140,7 +175,8 @@ export default {
     function showGame(game) {
       setTabs('game');
       const v = new GameView(body, game, { onNew: showSetup, onRematch: (g) => {
-        const ng = { ...g, id: Date.now().toString(36), t: Date.now(), status: 'active', moves: [], result: null, reason: null };
+        const ng = { ...g, id: Date.now().toString(36), t: Date.now(), status: 'active', moves: [], result: null, reason: null, clockHist: undefined,
+          clock: g.tc ? { w: g.tc.base * 60000, b: g.tc.base * 60000 } : null };
         pdata.games.push(ng); pdata.save(); showGame(ng);
       } });
       swap(v); v.mount();
@@ -156,9 +192,9 @@ export default {
         return userWon ? 'Kazandınız' : 'Kaybettiniz';
       };
       clear(body).append(h('div.table-host', games.length ? h('table.games',
-        h('thead', h('tr', h('th', 'Tarih'), h('th', 'Rakip'), h('th', 'Taraf'), h('th', 'Sonuç'), h('th', 'Hamle'), h('th', ''))),
+        h('thead', h('tr', h('th', 'Tarih'), h('th', 'Rakip'), h('th', 'Süre'), h('th', 'Taraf'), h('th', 'Sonuç'), h('th', 'Hamle'), h('th', ''))),
         h('tbody', games.map((g) => h('tr',
-          h('td', fmtDate(g.t)), h('td', opponentName(g.opp)), h('td', g.userColor === 'w' ? 'Beyaz' : 'Siyah'),
+          h('td', fmtDate(g.t)), h('td', opponentName(g.opp)), h('td', tcLabel(g.tc)), h('td', g.userColor === 'w' ? 'Beyaz' : 'Siyah'),
           h('td', h('b', resText(g)), h('div.sub', g.reason || '')), h('td', Math.ceil(g.moves.length / 2)),
           h('td.actions', h('button.btn.small', { onclick: () => showGame(g) }, 'Analiz'),
             h('button.icon-btn', { title: 'Sil', onclick: () => { pdata.games = pdata.games.filter((x) => x !== g); pdata.save(); showHistory(); } }, '🗑'))))))
@@ -197,7 +233,11 @@ class GameView {
     this.movesHost = h('div.movelist');
     this.infoHost = h('div');
     const oppColor = g.userColor === 'w' ? 'b' : 'w';
-    const bar = (color, name) => h('div.player-bar.' + (color === 'w' ? 'white' : 'black'), name);
+    this.clockEls = {};
+    const bar = (color, name) => {
+      const clk = g.tc ? (this.clockEls[color] = h('span.clock-face')) : null;
+      return h('div.player-bar.' + (color === 'w' ? 'white' : 'black'), h('span', name), clk);
+    };
     clear(this.root).append(h('div.gtm-layout',
       h('div.gtm-left', this.infoHost),
       h('div.gtm-center', bar(oppColor, opponentName(g.opp)), this.boardHost, bar(g.userColor, store.profile.name), this.statusEl, this.controls),
@@ -208,6 +248,10 @@ class GameView {
       if (e.key === 'ArrowLeft') this.browse(-1); else if (e.key === 'ArrowRight') this.browse(1);
     };
     window.addEventListener('keydown', this.keyHandler);
+    if (g.tc && g.clock) {
+      this.turnStart = Date.now(); // the clock never runs while the app was closed or the screen was left
+      this.tick = setInterval(() => this.updateClock(), 100);
+    }
     this.refresh();
     if (g.status === 'active') this.checkEnd() || this.maybeEngine();
   }
@@ -218,6 +262,53 @@ class GameView {
       h('button.icon-btn', { title: 'Geri', onclick: () => this.browse(-1) }, '◀'),
       h('button.icon-btn', { title: 'İleri', onclick: () => this.browse(1) }, '▶'),
       h('button.icon-btn', { title: 'Son pozisyon', onclick: () => this.goto(null) }, '⏭'));
+  }
+
+  // ---------- clock ----------
+  toMove() { const f = this.fens(); return f[f.length - 1].split(' ')[1]; }
+  // Like Lichess: the clock starts once both sides have made their first move.
+  clockRunning() { return !!(this.g.tc && this.g.clock && this.g.status === 'active' && this.g.moves.length >= 2); }
+  remaining(color) {
+    const c = this.g.clock;
+    if (!c) return 0;
+    return c[color] - (this.clockRunning() && this.toMove() === color ? Date.now() - this.turnStart : 0);
+  }
+  // Called right after a move is pushed: charge the mover, add the increment, start the other clock.
+  chargeMove(mover) {
+    const g = this.g;
+    if (!g.tc || !g.clock) return;
+    if (g.moves.length > 2) g.clock[mover] = Math.max(0, g.clock[mover] - (Date.now() - this.turnStart)) + g.tc.inc * 1000;
+    (g.clockHist = g.clockHist || []).push(g.clock[mover]);
+    this.turnStart = Date.now();
+  }
+  updateClock() {
+    const g = this.g;
+    if (!g.tc || !g.clock) return;
+    const run = this.clockRunning();
+    for (const color of ['w', 'b']) {
+      const el = this.clockEls[color];
+      if (!el) continue;
+      const ms = this.remaining(color);
+      el.textContent = fmtClock(ms);
+      el.classList.toggle('running', run && this.toMove() === color);
+      el.classList.toggle('low', ms < 20000);
+      if (run && ms <= 0 && this.toMove() === color) return this.flag(color);
+    }
+  }
+  flag(color) {
+    this.g.clock[color] = 0;
+    const other = color === 'w' ? 'b' : 'w';
+    const fens = this.fens();
+    if (!canMate(fens[fens.length - 1], other)) return this.end('1/2-1/2', 'Süre bitti, rakibin mat edecek materyali yok');
+    this.end(color === 'w' ? '0-1' : '1-0', 'Süre bitti');
+  }
+  // persist remaining time when leaving the screen mid-move
+  pauseClock() {
+    if (!this.clockRunning()) return;
+    const c = this.toMove();
+    this.g.clock[c] = Math.max(0, this.remaining(c));
+    this.turnStart = Date.now();
+    pdataSave();
   }
 
   isUserTurn() { const f = this.fens(); return f[f.length - 1].split(' ')[1] === this.g.userColor; }
@@ -252,6 +343,7 @@ class GameView {
       h('table.kv',
         h('tr', h('td', 'Rakip'), h('td', opponentName(g.opp))),
         h('tr', h('td', 'Tarafınız'), h('td', g.userColor === 'w' ? 'Beyaz' : 'Siyah')),
+        h('tr', h('td', 'Süre'), h('td', tcLabel(g.tc))),
         h('tr', h('td', 'Hamle'), h('td', Math.ceil(g.moves.length / 2))),
         g.status === 'done' ? h('tr', h('td', 'Sonuç'), h('td', h('b', this.resultText()))) : null)),
       g.status === 'done' ? h('p.muted.small', 'Oyun bitti. Hamlelere tıklayarak ya da ◀ ▶ ile gezinebilir, motoru açıp analiz edebilirsiniz.') : h('p.muted.small', 'Oyun sırasında motor analizi kapalıdır.'));
@@ -278,7 +370,9 @@ class GameView {
 
   onUserMove({ uci }) {
     if (this.g.status !== 'active' || this.view != null) return;
+    if (this.clockRunning() && this.remaining(this.g.userColor) <= 0) return this.flag(this.g.userColor);
     this.g.moves.push(uci);
+    this.chargeMove(this.g.userColor);
     pdataSave();
     this.refresh();
     if (!this.checkEnd()) this.maybeEngine();
@@ -298,7 +392,9 @@ class GameView {
     await new Promise((r) => setTimeout(r, wait));
     if (this.destroyed || this.g.status !== 'active') return;
     this.thinking = false;
+    if (this.clockRunning() && this.remaining(this.toMove()) <= 0) return this.flag(this.toMove());
     this.g.moves.push(uci);
+    this.chargeMove(this.g.userColor === 'w' ? 'b' : 'w');
     pdataSave();
     this.view = null;
     this.refresh();
@@ -324,11 +420,15 @@ class GameView {
 
   end(result, reason) {
     cancel('play');
+    if (this.clockRunning()) { const c = this.toMove(); this.g.clock[c] = Math.max(0, this.remaining(c)); }
+    if (this.tick) { clearInterval(this.tick); this.tick = null; }
     this.g.status = 'done'; this.g.result = result; this.g.reason = reason;
+    activity.add('playGames');
     pdataSave();
     this.thinking = false;
     this.view = null;
     this.refresh();
+    this.updateClock();
     this.setStatus(`${this.resultText()} (${reason})`);
     modal({ title: 'Oyun bitti', body: h('div.summary', h('div.big-score', this.resultText()), h('p.muted', { style: { textAlign: 'center' } }, reason)),
       actions: [{ label: 'Analiz et', onClick: () => this.live.toggle(true) }, { label: 'Yeni oyun', primary: true, onClick: () => this.onNew() }] });
@@ -364,6 +464,7 @@ class GameView {
     const name = store.profile.name, opp = opponentName(g.opp);
     const hdr = [['Event', 'Köroğlu Satranç'], ['Date', new Date(g.t).toISOString().slice(0, 10).replace(/-/g, '.')],
       ['White', g.userColor === 'w' ? name : opp], ['Black', g.userColor === 'w' ? opp : name], ['Result', g.result || '*']];
+    if (g.tc) hdr.push(['TimeControl', `${g.tc.base * 60}+${g.tc.inc}`]);
     if (start !== START_FEN) hdr.push(['SetUp', '1'], ['FEN', start]);
     const c = new Chess(start);
     for (const u of g.moves) c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
@@ -372,6 +473,8 @@ class GameView {
   }
 
   destroy() {
+    if (this.g.status === 'active') this.pauseClock();
+    if (this.tick) clearInterval(this.tick);
     this.destroyed = true;
     cancel('play');
     this.live.destroy();
