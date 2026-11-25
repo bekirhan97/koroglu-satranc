@@ -9,6 +9,7 @@ import { BoardEditor, START_FEN } from '../../src/renderer/core/editor.js';
 import { buildPackage, students as reports } from '../../src/renderer/core/assign.js';
 import { THEME_GROUPS, themeName } from '../../src/renderer/modules/puzzles/themes.js';
 import { createAssignment, syncReports } from './coach.js';
+import { notify } from './push.js';
 
 const ACADEMY = 'Köroğlu Satranç Akademi';
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
@@ -195,6 +196,7 @@ export async function finishDialog(opts) {
     (async () => {
       try {
         if (crit) crit.comment = crit.comment || '';
+        const firstTime = !s.finished_at;
         const patch = { topic: topic.value.trim() || null, note: summary.value.trim() || null, next_plan: next.value.trim() || null, critical: crit, finished_at: s.finished_at || new Date().toISOString(), updated_at: new Date().toISOString() };
         const { error } = await supa.from('sessions').update(patch).eq('id', s.id);
         if (error) throw error;
@@ -213,6 +215,11 @@ export async function finishDialog(opts) {
           if (theme) { await createAssignment(pkg, absent, opts.me); makeupTitle = pkg.title; }
         }
         toast('Ders raporu kaydedildi', 'ok');
+        if (firstTime) {
+          const t = `${opts.lessonName}${patch.topic ? ' · ' + patch.topic : ''}`;
+          notify(present.filter((sid) => !absent.includes(sid)), 'Ders raporun hazır 📋', t + ' — derste ne yaptık, kritik konum ve ödev.', '#program', 'rapor-' + s.id);
+          notify(absent, 'Kaçırdığın dersin özeti', t + (makeupTitle ? ' — telafi ödevin de hazır.' : ''), '#program', 'rapor-' + s.id);
+        }
         opts.onSaved && opts.onSaved();
         shareDialog({ ...opts, session: s, notes: Object.fromEntries(up.map((r) => [r.student_id, r.note])), makeupFor: makeupTitle ? absent : [], makeupTitle });
       } catch (e) { toast('Kaydedilemedi: ' + e.message, 'error'); }

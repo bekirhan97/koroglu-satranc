@@ -23,6 +23,8 @@ import schedule, { homeNextLesson, homeLessonReport } from './schedule.js';
 import lichessPlay, { live } from './lichess-play.js';
 import { loadOpenings } from '../../src/renderer/core/openings.js';
 import { startErrorLog, recentErrors } from './errlog.js';
+import { coachAlerts } from './alerts.js';
+import { pushState, enablePush, disablePush, forgetDevice } from './push.js';
 import { startLink, finishLink, getLink, unlink, lichessSummary, ensureRegistered, playToken, forgetPlay } from './lichess.js';
 import teacher from '../../src/renderer/modules/teacher/index.js';
 import { mountExam } from '../../src/renderer/modules/exam/index.js';
@@ -135,7 +137,10 @@ async function start() {
   if (playToken()) live.start();
   if (me.role === 'student') { await syncAssignments(); scheduleReport(lr && lr.username ? 1000 : 5000); }
   if (me.role === 'coach') await syncReports();
-  go(lr && lr.play ? 'lichess' : 'home');
+  // a notification opens the site with #page (e.g. #program)
+  const start = location.hash.slice(1);
+  go(lr && lr.play ? 'lichess' : start && MODULES.some((m) => m.id === start) ? start : 'home');
+  window.addEventListener('hashchange', () => { const id = location.hash.slice(1); if (id && id !== activeId) go(id); });
 }
 
 // Student: assignments targeted at me that are not imported yet.
@@ -276,9 +281,11 @@ async function renderHome(root) {
       me.role === 'coach' ? h('div.hero-actions', h('button.btn.primary', { onclick: () => go('teacher') }, 'Öğrencilerim')) : null),
     annHost,
     contHost,
+    me.role === 'coach' ? coachAlerts(me, go) : null,
     me.role === 'student' ? homeLessonReport(go) : null,
     me.role === 'student' ? homeNextLesson(go) : null,
     localStorage.getItem('koroglu-kurulum-kapat') ? null : installCard({ onDismiss: () => localStorage.setItem('koroglu-kurulum-kapat', '1') }),
+    pushCard(),
     me.role === 'student' ? today : null,
     asgHost, lbHost, lichessHost, badgeHost,
     h('div.module-grid', visibleModules().map((m) => h('button.module-card', { onclick: () => go(m.id) },
@@ -369,6 +376,20 @@ async function renderAssignments(host, contHost) {
   }
 }
 
+// Home: one-time invitation to turn on notifications on this device.
+function pushCard() {
+  const host = h('div');
+  if (localStorage.getItem('koroglu-bildirim-kapat')) return host;
+  pushState().then((st) => {
+    if (st !== 'off') return;
+    host.append(h('div.panel.push-card', h('div', h('b', '🔔 Bildirimleri aç'),
+      h('div.muted.small', me.role === 'student' ? 'Yeni ödev, ders iptali ve ders raporu gelince telefonuna haber gelsin.' : 'Bu cihazda bildirim almak için.')),
+      h('div.row-btns', h('button.btn.small.primary', { onclick: async () => { try { await enablePush(); toast('Bildirimler açıldı', 'ok'); host.remove(); } catch (e) { toast(e.message, 'error'); } } }, 'Aç'),
+        h('button.btn.small.ghost', { onclick: () => { localStorage.setItem('koroglu-bildirim-kapat', '1'); host.remove(); } }, 'Şimdi değil'))));
+  }).catch(() => {});
+  return host;
+}
+
 async function renderSettings(root) {
   const s = store.settings;
   await assignments.load();
@@ -377,6 +398,16 @@ async function renderSettings(root) {
   const row = (label, control, hint) => h('div.set-row', h('div', h('div.set-label', label), hint ? h('div.muted.small', hint) : null), control);
   const save = () => { store.saveSettings(); toast('Kaydedildi', 'ok'); };
   const lichessBox = h('div.btn-row');
+  const pushBox = h('div.btn-row');
+  const drawPush = async () => {
+    const st = await pushState().catch(() => 'unsupported');
+    const msg = { homescreen: 'iPhone/iPad\'de önce siteyi ana ekrana ekle ("Uygulama gibi kullan"), sonra simgeden açıp buradan aç.', unsupported: 'Bu tarayıcı bildirimleri desteklemiyor.', denied: 'Bildirim izni kapalı. Tarayıcının site ayarlarından izin verip sayfayı yenile.' };
+    clear(pushBox).append(...(st === 'on'
+      ? [h('b', 'Açık ✓'), h('button.btn.small.ghost', { onclick: async () => { await disablePush().catch(() => {}); toast('Bu cihazda bildirimler kapatıldı'); drawPush(); } }, 'Kapat')]
+      : st === 'off' ? [h('button.btn.small.primary', { onclick: async (e) => { e.target.disabled = true; try { await enablePush(); toast('Bildirimler açıldı', 'ok'); } catch (err) { toast(err.message, 'error'); } drawPush(); } }, 'Bildirimleri aç')]
+        : [h('span.muted.small', msg[st])]));
+  };
+  drawPush();
   const drawLichess = async () => {
     const l = await getLink();
     clear(lichessBox).append(...(l
@@ -391,6 +422,7 @@ async function renderSettings(root) {
         row('Ad', h('span', me.display_name), me.role === 'student' ? 'Adınızı antrenörünüz değiştirebilir.' : null),
         row('Kullanıcı adı', h('span', '@' + me.username)),
         row('Şifre', h('button.btn.small', { onclick: changePassword }, 'Şifremi değiştir')),
+        row('Bildirimler', pushBox, me.role === 'student' ? 'Yeni ödev, ders iptali, ders raporu ve duyurular telefonuna bildirim olarak gelir. Her cihazda ayrı açılır.' : 'Bu cihaz için. Öğrencilere bildirim, ödev/duyuru/ders iptali/ders raporu kaydedilince kendiliğinden gider.'),
         row('Lichess hesabı', lichessBox, 'Lichess\'in kendi giriş sayfası açılır; şifreniz bize gelmez. Yalnızca kullanıcı adınız ve puanlarınız alınır.'),
         row('Çıkış', h('button.btn.small', { onclick: logout }, 'Çıkış yap'), 'Ortak kullanılan bir cihazdaysanız çıkış yapmayı unutmayın.')),
       me.role === 'student' ? h('div.panel',
@@ -440,6 +472,7 @@ function changePassword() {
 async function logout() {
   await flushAll();
   if (me && me.role === 'student') await sendReport();
+  await forgetDevice();
   await supa.auth.signOut();
   location.reload();
 }

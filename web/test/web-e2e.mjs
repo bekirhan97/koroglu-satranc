@@ -428,5 +428,38 @@ await s.click('button:has-text("Giriş yap")'); await s.waitForSelector('.home',
 console.log('  öğrencide kalan ödev:', await s.locator('.asg-title').count());
 await shot(s, '22-ogrenci-odev-kalkti');
 
+step('tablet görünümleri (iPad dikey/yatay, Android tablet)');
+for (const [name, vp] of [['ipad-dikey', { width: 820, height: 1180 }], ['ipad-yatay', { width: 1180, height: 820 }], ['android-tablet', { width: 800, height: 1280 }]]) {
+  const t = await newPage(vp);
+  await t.goto(URL); await t.waitForTimeout(1500);
+  await t.fill('input[placeholder="Kullanıcı adı"]', studentUser); await t.fill('input[placeholder="Şifre"]', studentPass);
+  await t.click('button:has-text("Giriş yap")'); await t.waitForSelector('.home', { timeout: 20000 }); await t.waitForTimeout(2000);
+  const over = async () => t.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  await shot(t, `30-${name}-ana`);
+  const o1 = await over();
+  await nav(t, 'Bulmaca'); await t.waitForTimeout(2500);
+  await shot(t, `31-${name}-bulmaca`);
+  const bb = await t.locator('cg-board').first().boundingBox().catch(() => null);
+  const o2 = await over();
+  await nav(t, 'Program'); await t.waitForTimeout(2000);
+  await shot(t, `32-${name}-program`);
+  console.log(`  ${name}: yatay taşma ana=${o1} bulmaca=${o2} program=${await over()} · tahta ${bb ? Math.round(bb.width) + 'px' : 'yok'}`);
+  await t.context().close();
+}
+const tc = await newPage({ width: 820, height: 1180 });
+await tc.goto(URL); await tc.waitForTimeout(1500);
+await tc.fill('input[placeholder="Kullanıcı adı"]', 'test.antrenor'); await tc.fill('input[placeholder="Şifre"]', 'testsifre123');
+await tc.click('button:has-text("Giriş yap")'); await tc.waitForSelector('.home', { timeout: 20000 }); await tc.waitForTimeout(2000);
+await nav(tc, 'Program'); await tc.waitForTimeout(2000); await shot(tc, '33-ipad-antrenor-program');
+await tc.locator('.lesson:not(.tek)').first().click(); await tc.waitForTimeout(2000); await shot(tc, '34-ipad-ders-karti');
+await tc.locator('.modal button:has-text("Vazgeç")').click().catch(() => {});
+await nav(tc, 'Antrenör'); await tc.waitForTimeout(2000); await shot(tc, '35-ipad-antrenor');
+console.log('  ipad antrenör taşma:', await tc.evaluate(() => document.documentElement.scrollWidth - window.innerWidth));
+
+step('bildirim tetikleri');
+const kinds = MOCK.pushes.filter((b) => b.action === 'gonder').map((b) => b.title + ' → ' + b.ids.length);
+console.log('  gönderilen bildirimler:', kinds.join(' | '));
+console.log('  uyarılar paneli (antrenör ana sayfa):', await (async () => { await nav(c, 'Ana Sayfa'); await c.waitForTimeout(2500); await shot(c, '36-uyarilar'); return (await c.locator('.alerts-panel').textContent().catch(() => 'yok')).replace(/\s+/g, ' ').slice(0, 300); })());
+
 console.log('\nHATALAR:', errors.length ? errors.join('\n') : 'yok');
 await browser.close();

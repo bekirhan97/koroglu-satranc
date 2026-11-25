@@ -7,7 +7,7 @@ window.addEventListener('appinstalled', () => { deferred = null; });
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 export const isInstalled = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+export const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 // Card with a button (Android/desktop Chrome, Edge) or instructions (iPhone/iPad, others).
 export function installCard({ onDismiss } = {}) {

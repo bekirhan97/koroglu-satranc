@@ -1,5 +1,6 @@
 // Antrenör (web): öğrenci hesapları, ödevi öğrencilere gönderme, raporları çekme.
 // The desktop teacher module calls these through window.webHooks.
+import { notify } from './push.js';
 import { supa, hesap, cleanUsername } from './supa.js';
 import { h, clear, modal, toast, fmtDate } from '../../src/renderer/core/dom.js';
 import { students, packageSummary, partText } from '../../src/renderer/core/assign.js';
@@ -174,7 +175,12 @@ export function accountsHooks(me) {
               if (!t) { toast('Duyuru metni yazın', 'error'); return; }
               const days = +dur.value;
               const { error } = await supa.from('announcements').insert({ body: t, group_name: grp.value || null, expires_at: days ? new Date(Date.now() + days * 86400e3).toISOString() : null });
-              if (error) toast('Gönderilemedi: ' + error.message, 'error'); else { toast('Duyuru gönderildi', 'ok'); redraw(); }
+              if (error) toast('Gönderilemedi: ' + error.message, 'error'); else {
+                toast('Duyuru gönderildi', 'ok');
+                const isHead = !meta.coaches[meta.me] || !meta.coaches[meta.me].coach_id;
+                notify(Object.values(meta.students).filter((st) => (isHead || (st.coaches || []).includes(meta.me)) && (!grp.value || st.group_name === grp.value)).map((st) => st.id), '📣 Duyuru', t, '#home', 'duyuru');
+                redraw();
+              }
             } }, 'Duyur'))),
         h('div.panel', h('div.panel-title', 'Duyurular'),
           (anns || []).length ? (anns || []).map((a) => {
@@ -257,10 +263,12 @@ export function accountsHooks(me) {
 
 // Save an assignment package and its students (used by "Ödev ver" and by lesson make-up packages).
 export async function createAssignment(pkg, studentIds, me) {
+  const notifyAfter = () => notify(studentIds, pkg.makeup ? 'Telafi ödevin hazır' : 'Yeni ödevin var 📚', pkg.title + (pkg.due ? ' · son gün ' + new Date(pkg.due).toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''), '#home', 'odev-' + pkg.id);
   const { error } = await supa.from('assignments').insert({ id: pkg.id, coach_id: me.id, title: pkg.title, package: pkg });
   if (error) throw new Error('Ödev kaydedilemedi: ' + error.message);
   const { error: e2 } = await supa.from('assignment_targets').insert(studentIds.map((sid) => ({ assignment_id: pkg.id, student_id: sid })));
   if (e2) { await supa.from('assignments').delete().eq('id', pkg.id); throw new Error('Öğrencilere atanamadı: ' + e2.message); }
+  if (!pkg.makeup) notifyAfter();
 }
 
 function field(label, input, hint) { return h('label.form-row', h('span.form-l', label), input, hint ? h('span.muted.small', hint) : null); }

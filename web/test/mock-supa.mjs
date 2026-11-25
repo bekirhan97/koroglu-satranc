@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 export function createMock() {
   const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [], student_coaches: [], classes: [], class_members: [], sessions: [], attendance: [], scores: [], client_errors: [], session_notes: [], session_reads: [] };
   const users = new Map(); // email -> { id, password }
+  const pushes = []; // calls to the bildirim function
   const tokens = new Map(); // token -> user id
   const DOMAIN = 'kullanici.koroglu-satranc.app';
   const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'], classes: ['id'], class_members: ['class_id', 'student_id'], sessions: ['id'], attendance: ['session_id', 'student_id'], scores: ['id'], client_errors: ['id'], session_notes: ['session_id', 'student_id'], session_reads: ['session_id', 'student_id'] };
@@ -64,6 +65,11 @@ export function createMock() {
     }
     if (p === '/auth/v1/logout') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } });
     // ---- functions ----
+    if (p === '/functions/v1/bildirim') {
+      const b = JSON.parse(req.postData() || '{}');
+      pushes.push(b);
+      return json(route, 200, b.action === 'anahtar' ? { publicKey: 'BG1xDURLj51WXrjuy1ESBHF5efFO3TnEm8kugR4_ZbmVqJ_uovLxZofcvKUMSRLDDqMgPe-0nz7QNUaNP4fd-i0' } : { users: 0, devices: 0, sent: 0 });
+    }
     if (p === '/functions/v1/hesap') {
       const b = JSON.parse(req.postData() || '{}');
       if (b.action === 'durum') return json(route, 200, { hasCoach: true });
@@ -182,5 +188,5 @@ export function createMock() {
     return { access_token: access, refresh_token: refresh, token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user: userObj(id) };
   }
 
-  return { db, addUser, handle, attach: (ctx) => ctx.route('https://ajghkdqwgcgzscweckoo.supabase.co/**', handle) };
+  return { db, pushes, addUser, handle, attach: (ctx) => ctx.route('https://ajghkdqwgcgzscweckoo.supabase.co/**', handle) };
 }

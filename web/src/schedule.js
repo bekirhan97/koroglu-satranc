@@ -9,6 +9,8 @@ import { h, clear, modal, toast, fmtDate } from '../../src/renderer/core/dom.js'
 import { academyStudents, academyCoaches, meta, syncReports } from './coach.js';
 import { students as reports } from '../../src/renderer/core/assign.js';
 import { PuzzleSolver } from '../../src/renderer/modules/puzzles/solver.js';
+import { themeName } from '../../src/renderer/modules/puzzles/themes.js';
+import { notify } from './push.js';
 import { finishDialog, shareDialog, makeupStatus, openStudentReport } from './lessonReport.js';
 
 const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
@@ -171,11 +173,25 @@ async function lessonHomework(l, host, close, me) {
   try { hw = await linkedHomework(l); } catch (e) { clear(host).append(h('div.form-l', 'Ödev', h('span.spacer'), giveBtn), h('div.muted.small', 'Ödevler alınamadı.')); return; }
   l._hw = hw;
   const { here, prev } = hw;
-  if (prev.length || hw.makeup.length) await syncReports().catch(() => 0);
+  await syncReports().catch(() => 0);
+  const weak = groupWeakThemes(l.student_ids);
   clear(host).append(...[h('div.form-l', 'Ödev', h('span.spacer'), giveBtn),
+    weak.length ? h('div.hw-summary', h('div', h('b', 'Grubun zayıf temaları: '), weak.map((w) => `${themeName(w.theme)} (${w.n} öğrenci)`).join(', ')),
+      h('div.muted.small', 'Öğrencilerin bulmaca sonuçlarından. Derste ya da ödevde bu temalara ağırlık verebilirsin.')) : null,
     here.length ? h('div.muted.small', 'Bu derste verilen: ', here.map((a) => a.title).join(', ')) : null,
     ...prev.map((a) => homeworkSummary(a)),
     !here.length && !prev.length ? h('div.muted.small', 'Bu derse bağlı ödev yok. Verdiğin ödevin sonucu bir sonraki dersin kartında özetlenir.') : null].filter(Boolean));
+}
+
+// Themes most often among the students' weakest (from their latest reports).
+function groupWeakThemes(ids) {
+  const n = new Map();
+  for (const sid of ids) {
+    const rep = reports.map[sid] && reports.map[sid].last;
+    for (const t of (rep && rep.puzzles && rep.puzzles.weakest) || []) n.set(t, (n.get(t) || 0) + 1);
+  }
+  const min = ids.length > 2 ? 2 : 1;
+  return [...n.entries()].filter(([, c]) => c >= min).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([theme, c]) => ({ theme, n: c }));
 }
 
 function homeworkSummary(a) {
@@ -249,6 +265,8 @@ function lessonDialog(l, att, me, done) {
       if (up.length) { const { error: e2 } = await supa.from('attendance').upsert(up, { onConflict: 'session_id,student_id' }); if (e2) throw e2; }
       if (off.length) await supa.from('attendance').delete().eq('session_id', s.id).in('student_id', off);
       if (!quiet) toast(status === 'cancelled' ? 'Ders iptal edildi' : status === 'planned' ? 'İptal geri alındı' : 'Kaydedildi', 'ok');
+      if (status === 'cancelled') notify(l.student_ids, 'Ders iptal edildi', `${l.name} · ${fmtDate(parseKey(l.date))} ${l.start}`, '#program', 'ders-' + s.id);
+      if (status === 'planned') notify(l.student_ids, 'Ders yapılacak ✓', `${l.name} · ${fmtDate(parseKey(l.date))} ${l.start} dersi iptal edilmedi, görüşmek üzere.`, '#program', 'ders-' + s.id);
       s.note = patch.note;
       done();
       return s;

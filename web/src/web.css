@@ -255,3 +255,12 @@ table.lb tr.me td { background: #fff3d6; font-weight: 700; }
 /* Long dialogs scroll inside the window */
 .modal { max-height: 92dvh; display: flex; flex-direction: column; }
 .modal-body { overflow: auto; min-height: 0; }
+
+/* Coach alerts */
+.alerts-panel .panel-title { display: flex; align-items: center; gap: 8px; }
+.alerts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.alert-group { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.alert-k { font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.alert-row { display: flex; flex-direction: column; }
+.alert-row.hidden { display: none; }
+.push-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
