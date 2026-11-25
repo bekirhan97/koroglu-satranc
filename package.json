@@ -152,8 +152,7 @@
       "gatekeeperAssess": false,
       "artifactName": "KorogluSatranc-${version}-Mac-${arch}.${ext}",
       "extendInfo": {
-        "CFBundleDisplayName": "Köroğlu Satranç",
-        "CFBundleName": "Köroğlu Satranç"
+        "CFBundleDisplayName": "Köroğlu Satranç"
       }
     },
     "linux": {
