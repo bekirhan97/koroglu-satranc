@@ -151,6 +151,38 @@ console.log('  sıralama onayı:', MOCK.db.profiles.find((x) => x.username === s
 MOCK.db.reports.push({ student_id: sid2, report: { activity: { days: [{ key: '2026-11-25', puzzles: 12 }], streak: { current: 3 } }, ratings: { puzzles: { r: 1620 } } } });
 
 // ---------- student ----------
+step('başantrenör: ikinci antrenör + özel ders öğrencisi');
+await c.click('.tab:has-text("Antrenörler")'); await c.waitForSelector('button:has-text("+ Antrenör hesabı aç")');
+await c.click('button:has-text("+ Antrenör hesabı aç")');
+await c.fill('.modal input[placeholder="Antrenörün adı soyadı"]', 'Ahmet Kaya');
+await c.waitForTimeout(200);
+const coach2User = await c.inputValue('.modal input[placeholder="kullanıcı adı"]');
+console.log('  2. antrenör kullanıcı adı:', coach2User);
+const coach2Pass = await c.locator('.modal .form-row input').nth(2).inputValue();
+await c.click('.modal button:has-text("Hesabı aç")'); await c.waitForSelector('.cred'); await c.click('.modal button:has-text("Tamam")'); await c.waitForTimeout(1200);
+await shot(c, '07c-antrenorler');
+await c.click('.tab:has-text("Hesaplar")'); await c.waitForSelector('button:has-text("+ Öğrenci hesabı aç")');
+await c.click('button:has-text("+ Öğrenci hesabı aç")');
+await c.fill('.modal input[placeholder="Öğrencinin adı soyadı"]', 'Zeynep Demir');
+await c.click('.modal .seg button:has-text("Özel ders")');
+await c.click('.modal .coach-pick label:has-text("Ahmet Kaya") input');
+await c.click('.modal button:has-text("Hesabı aç")'); await c.waitForSelector('.cred'); await c.click('.modal button:has-text("Tamam")'); await c.waitForTimeout(1500);
+await shot(c, '07d-hesaplar-filtre');
+await c.selectOption('.filter-sel', 'ozel'); await c.waitForTimeout(1200);
+console.log('  özel ders filtresi:', await c.locator('table.accounts tbody tr').count(), 'öğrenci');
+await c.selectOption('.filter-sel', 'all'); await c.waitForTimeout(800);
+const c2 = await newPage();
+await c2.goto(URL); await c2.waitForSelector('.login-card'); await c2.waitForTimeout(1500);
+await c2.fill('input[placeholder="Kullanıcı adı"]', coach2User); await c2.fill('input[placeholder="Şifre"]', coach2Pass);
+await c2.click('button:has-text("Giriş yap")');
+await c2.waitForSelector('.home', { timeout: 20000 });
+await c2.click('.nav-item:has-text("Antrenör")'); await c2.waitForTimeout(800);
+await c2.click('.tab:has-text("Hesaplar")'); await c2.waitForTimeout(1500);
+console.log('  2. antrenör: öğrenci sayısı', await c2.locator('table.accounts tbody tr').count(), '· Antrenörler sekmesi', await c2.locator('.tab:has-text("Antrenörler")').count());
+await c2.selectOption('.filter-sel', 'mine'); await c2.waitForTimeout(1000);
+console.log('  2. antrenör "benim öğrencilerim":', await c2.locator('table.accounts tbody tr').count());
+await shot(c2, '07e-ikinci-antrenor');
+
 step('öğrenci girişi');
 const s = await newPage({ width: 390, height: 844 });
 await s.goto(URL); await s.waitForTimeout(2500);

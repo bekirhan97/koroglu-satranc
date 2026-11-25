@@ -4,12 +4,14 @@
 import crypto from 'node:crypto';
 
 export function createMock() {
-  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [] };
+  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [], student_coaches: [] };
   const users = new Map(); // email -> { id, password }
   const tokens = new Map(); // token -> user id
   const DOMAIN = 'kullanici.koroglu-satranc.app';
   const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'] };
 
+  const prof = (id) => db.profiles.find((x) => x.id === id);
+  const academyOf = (p) => (p ? (p.role === 'coach' && !p.coach_id ? p.id : p.coach_id) : null);
   function addUser(username, password, profile) {
     const id = crypto.randomUUID();
     users.set(`${username}@${DOMAIN}`, { id, password });
@@ -65,13 +67,16 @@ export function createMock() {
       const uid = userFromReq(req);
       const me = db.profiles.find((x) => x.id === uid);
       if (!me || me.role !== 'coach') return json(route, 403, { error: 'Bu işlem yalnızca antrenör içindir.' });
-      if (b.action === 'ogrenci_ac') {
+      if (b.action === 'ogrenci_ac' || b.action === 'antrenor_ac') {
         const username = String(b.username).toLowerCase();
         if (db.profiles.some((x) => x.username === username)) return json(route, 400, { error: 'Bu kullanıcı adı zaten kullanılıyor.' });
-        const id = addUser(username, b.password, { role: 'student', display_name: b.display_name, coach_id: me.id, group_name: b.group_name || null });
+        if (b.action === 'antrenor_ac') { if (me.coach_id) return json(route, 403, { error: 'yalnızca başantrenör' }); const id = addUser(username, b.password, { role: 'coach', display_name: b.display_name, coach_id: me.id }); return json(route, 200, { ok: true, id, username }); }
+        const id = addUser(username, b.password, { role: 'student', display_name: b.display_name, coach_id: academyOf(me), group_name: b.group_name || null, lesson_type: b.lesson_type || 'grup' });
+        for (const c of (b.coach_ids && b.coach_ids.length ? b.coach_ids : [me.id])) db.student_coaches.push({ student_id: id, coach_id: c });
         return json(route, 200, { ok: true, id, username });
       }
-      if (b.action === 'ogrenci_guncelle') { const st = db.profiles.find((x) => x.id === b.id); if ('display_name' in b) st.display_name = b.display_name; if ('group_name' in b) st.group_name = b.group_name; return json(route, 200, { ok: true }); }
+      if (b.action === 'ogrenci_guncelle') { const st = db.profiles.find((x) => x.id === b.id); for (const k of ['display_name', 'group_name', 'lesson_type']) if (k in b) st[k] = b[k];
+        if (b.coach_ids) { db.student_coaches = db.student_coaches.filter((x) => x.student_id !== b.id); for (const c of b.coach_ids) db.student_coaches.push({ student_id: b.id, coach_id: c }); } return json(route, 200, { ok: true }); }
       if (b.action === 'ogrenci_sil') { db.profiles = db.profiles.filter((x) => x.id !== b.id); db.reports = db.reports.filter((x) => x.student_id !== b.id); return json(route, 200, { ok: true }); }
       return json(route, 400, { error: 'Bilinmeyen işlem' });
     }
@@ -80,13 +85,13 @@ export function createMock() {
       const uid = userFromReq(req); const me = db.profiles.find((x) => x.id === uid);
       const { uname } = JSON.parse(req.postData() || '{}');
       db.lichess_accounts = db.lichess_accounts.filter((x) => x.user_id !== uid);
-      if (uname) db.lichess_accounts.push({ user_id: uid, coach_id: me.role === 'coach' ? me.id : me.coach_id, display_name: me.display_name, username: uname });
+      if (uname) db.lichess_accounts.push({ user_id: uid, coach_id: academyOf(me), display_name: me.display_name, username: uname });
       return json(route, 204);
     }
     if (p === '/rest/v1/rpc/set_leaderboard_ok') { const b = JSON.parse(req.postData() || '{}'); const st = db.profiles.find((x) => x.id === b.student); st.leaderboard_ok = b.ok; return json(route, 204); }
     if (p === '/rest/v1/rpc/leaderboard') {
       const uid = userFromReq(req); const me = db.profiles.find((x) => x.id === uid);
-      const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === (me.role === 'coach' ? me.id : me.coach_id) && (me.role === 'coach' || x.group_name === me.group_name) && (x.leaderboard_ok || x.id === uid));
+      const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === academyOf(me) && (me.role === 'coach' || x.group_name === me.group_name) && (x.leaderboard_ok || x.id === uid));
       return json(route, 200, team.map((t) => { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; const days = r ? r.activity.days.slice(-7) : [];
         return { name: t.display_name.split(' ')[0] + ' ' + t.display_name.split(' ').pop()[0] + '.', is_me: t.id === uid, group_name: t.group_name, week_puzzles: days.reduce((a, d) => a + (d.puzzles || 0) + (d.reviews || 0), 0), streak: r ? r.activity.streak.current : 0, rating: r ? r.ratings.puzzles.r : 1500 }; }));
     }
@@ -99,14 +104,16 @@ export function createMock() {
     const prefer = req.headers().prefer || '';
     if (method === 'GET' || method === 'HEAD') {
       let rows = filterRows(table, url);
+      const meP = prof(uid), acad = academyOf(meP), isCoach = meP && meP.role === 'coach';
       // minimal visibility rules so the coach sees own students and students see own coach's videos
-      if (table === 'profiles') { const me = db.profiles.find((x) => x.id === uid); rows = rows.filter((r) => r.id === uid || r.coach_id === uid || (me && r.id === me.coach_id)); }
-      if (table === 'assignments') rows = rows.filter((a) => a.coach_id === uid || db.assignment_targets.some((t) => t.assignment_id === a.id && t.student_id === uid));
-      if (table === 'videos') { const me = db.profiles.find((x) => x.id === uid); rows = rows.filter((v) => v.coach_id === uid || (me && v.coach_id === me.coach_id)); }
-      if (table === 'announcements') { const me = db.profiles.find((x) => x.id === uid); rows = rows.filter((a) => a.coach_id === uid || (me && a.coach_id === me.coach_id && (!a.group_name || a.group_name === me.group_name))); }
+      if (table === 'profiles') { rows = rows.filter((r) => r.id === uid || (meP && r.id === meP.coach_id) || (isCoach && academyOf(r) === acad));
+        if ((url.searchParams.get('select') || '').includes('student_coaches')) rows = rows.map((r) => ({ ...r, student_coaches: db.student_coaches.filter((x) => x.student_id === r.id).map((x) => ({ coach_id: x.coach_id })) })); }
+      if (table === 'assignments') rows = rows.filter((a) => a.coach_id === uid || (isCoach && academyOf(prof(a.coach_id)) === acad) || db.assignment_targets.some((t) => t.assignment_id === a.id && t.student_id === uid));
+      if (table === 'videos') rows = rows.filter((v) => academyOf(prof(v.coach_id)) === acad);
+      if (table === 'announcements') rows = rows.filter((a) => a.coach_id === uid || (meP && meP.role === 'student' && (a.coach_id === acad || db.student_coaches.some((x) => x.student_id === uid && x.coach_id === a.coach_id)) && (!a.group_name || a.group_name === meP.group_name)));
       if (table === 'assignments' && url.searchParams.get('select') && url.searchParams.get('select').includes('assignment_targets')) rows = rows.map((a) => ({ ...a, assignment_targets: db.assignment_targets.filter((t) => t.assignment_id === a.id).map((t) => ({ student_id: t.student_id })) }));
-      if (table === 'lichess_accounts') { const me = db.profiles.find((x) => x.id === uid); const team = me && (me.role === 'coach' ? me.id : me.coach_id); rows = rows.filter((r) => r.user_id === uid || r.coach_id === team); }
-      if (table === 'reports') rows = rows.filter((r) => r.student_id === uid || db.profiles.some((x) => x.id === r.student_id && x.coach_id === uid));
+      if (table === 'lichess_accounts') rows = rows.filter((r) => r.user_id === uid || r.coach_id === acad);
+      if (table === 'reports') rows = rows.filter((r) => r.student_id === uid || (isCoach && prof(r.student_id) && prof(r.student_id).coach_id === acad));
       if (single) return rows.length ? json(route, 200, rows[0]) : json(route, 406, { code: 'PGRST116', message: 'no rows' });
       return json(route, 200, rows, { 'content-range': `0-${rows.length}/${rows.length}` });
     }

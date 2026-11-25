@@ -173,7 +173,7 @@ function nav() {
     h('button.nav-item.nav-more' + (moreActive ? '.active' : ''), { onclick: (e) => { e.stopPropagation(); side.classList.toggle('more-open'); } }, h('span.nav-icon', '☰'), h('span.nav-label', 'Diğer'), h('span.nav-short', 'Diğer')),
     h('div.more-menu', [...visibleModules().filter((m) => !primary.has(m.id)).map((m) => [m.id, m.icon, m.title]), ['settings', '⚙', 'Ayarlar']].map(([id, icon, title]) =>
       h('button.more-item' + (activeId === id ? '.active' : ''), { onclick: () => { side.classList.remove('more-open'); go(id); } }, h('span', icon), h('span', title)))),
-    h('div.profile-chip', me.display_name, h('div.muted.small', me.role === 'coach' ? 'Antrenör' : `@${me.username}`)),
+    h('div.profile-chip', me.display_name, h('div.muted.small', me.role === 'coach' ? (me.coach_id ? 'Antrenör' : 'Başantrenör') : `@${me.username}`)),
     saveDot);
   return side;
 }

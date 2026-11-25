@@ -151,3 +151,6 @@ table.lb tr.me td { background: #fff3d6; font-weight: 700; }
 .install-card > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .install-body { margin-top: 4px; }
 .settings .install-card { border: 0; padding: 0; margin: 0; }
+.filter-sel { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+.chip.ozel { background: #efe3f7; color: #6a2c8c; }
+.coach-pick { display: flex; flex-wrap: wrap; gap: 6px 16px; }

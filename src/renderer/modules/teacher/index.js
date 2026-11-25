@@ -46,14 +46,15 @@ export default {
     const tabsHost = h('div.tabs');
     const body = h('div.module-body.teacher');
     clear(root).append(h('div.module', h('div.module-head', h('h2', this.title), tabsHost), body));
-    const setTabs = (active, extra) => clear(tabsHost).append(
+    const setTabs = (active, extra) => clear(tabsHost).append(...[
       h('button.tab' + (active === 'students' ? '.active' : ''), { onclick: showStudents }, 'Öğrencilerim'),
       window.webHooks ? h('button.tab' + (active === 'accounts' ? '.active' : ''), { onclick: showAccounts }, 'Hesaplar') : null,
       window.webHooks ? h('button.tab' + (active === 'assignments' ? '.active' : ''), { onclick: () => { setTabs('assignments'); window.webHooks.assignmentsTab(body); } }, 'Ödevler') : null,
       window.webHooks ? h('button.tab' + (active === 'announcements' ? '.active' : ''), { onclick: () => { setTabs('announcements'); window.webHooks.announcementsTab(body); } }, 'Duyurular') : null,
+      window.webHooks && window.webHooks.isHead ? h('button.tab' + (active === 'coaches' ? '.active' : ''), { onclick: () => { setTabs('coaches'); window.webHooks.coachesTab(body); } }, 'Antrenörler') : null,
       window.webHooks ? h('button.tab' + (active === 'leaderboard' ? '.active' : ''), { onclick: () => { setTabs('leaderboard'); window.webHooks.leaderboardTab(body); } }, 'Sıralama') : null,
       h('button.tab' + (active === 'package' ? '.active' : ''), { onclick: showPackage }, window.webHooks ? 'Ödev ver' : 'Ödev paketi hazırla'),
-      ...(extra ? [h('button.tab.active', extra)] : []));
+      ...(extra ? [h('button.tab.active', extra)] : [])].filter(Boolean));
 
     // ---------- accounts (web only) ----------
     function showAccounts() {
@@ -64,7 +65,9 @@ export default {
     // ---------- students ----------
     function showStudents() {
       setTabs('students');
-      const list = Object.values(students.map).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+      const wh = window.webHooks;
+      const metaOf = (id) => (wh ? wh.studentMeta()[id] : null);
+      const list = Object.values(students.map).filter((st) => !wh || wh.filterTest(st.id)).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
       const importBtn = window.webHooks
         ? h('button.btn', { onclick: async () => { await window.webHooks.syncReports(); showStudents(); toast('Güncellendi', 'ok'); } }, '↻ Yenile')
         : h('button.btn.primary', { onclick: async () => { const fs = await api.openFiles('rapor'); if (fs.length) { await importReports(fs); showStudents(); } } }, '+ Rapor içe aktar');
@@ -76,7 +79,7 @@ export default {
         const asg = r.assignments.length ? r.assignments.reduce((a, x) => a + x.pct, 0) / r.assignments.length : null;
         const stale = Date.now() - r.createdAt > 8 * 86400e3;
         return h('tr.clickable', { onclick: () => showStudent(s.id) },
-          h('td', h('b', s.name), h('div.sub', `Rapor: ${fmtDate(r.createdAt)} (${ago(r.createdAt)})`, stale ? h('span.bad-text', ' · eski') : null)),
+          h('td', h('b', s.name), h('div.sub', metaOf(s.id) ? (metaOf(s.id).lesson_type === 'ozel' ? 'Özel ders' + (metaOf(s.id).group_name ? ' · ' + metaOf(s.id).group_name : '') : metaOf(s.id).group_name || 'Grupsuz') + ' · ' : null, `Rapor: ${fmtDate(r.createdAt)} (${ago(r.createdAt)})`, stale ? h('span.bad-text', ' · eski') : null)),
           h('td.num', r.ratings.puzzles.r, prev ? h('span.delta' + (r.ratings.puzzles.r >= prev.puzzles ? '.up' : '.down'), ' ' + sign(r.ratings.puzzles.r - prev.puzzles)) : null),
           h('td.num', r.ratings.gtm.r, prev ? h('span.delta' + (r.ratings.gtm.r >= prev.gtm ? '.up' : '.down'), ' ' + sign(r.ratings.gtm.r - prev.gtm)) : null),
           h('td.num', r.activity.streak.current, h('span.muted', ' gün')),
@@ -85,7 +88,7 @@ export default {
           h('td', asg == null ? h('span.muted', '–') : h('div.mini-progress', h('span', { style: { width: pct(asg) } }), h('b', pct(asg)))));
       });
       clear(body).append(h('div.sets-page',
-        h('div.toolbar', importBtn, h('span.muted', window.webHooks ? 'Öğrencilerin çalışmaları siz bir şey yapmadan buraya gelir (öğrenci siteyi kullandıkça güncellenir).' : 'Öğrencileriniz Ana Sayfa\'daki "Rapor gönder" düğmesiyle bir .krapor dosyası oluşturup size gönderir. Dosyayı buraya ekleyin ya da çift tıklayın.')),
+        h('div.toolbar', importBtn, wh ? wh.filterSelect(Object.values(wh.studentMeta()), showStudents) : null, h('span.muted', window.webHooks ? 'Öğrencilerin çalışmaları siz bir şey yapmadan buraya gelir (öğrenci siteyi kullandıkça güncellenir).' : 'Öğrencileriniz Ana Sayfa\'daki "Rapor gönder" düğmesiyle bir .krapor dosyası oluşturup size gönderir. Dosyayı buraya ekleyin ya da çift tıklayın.')),
         list.length ? h('div.table-host', h('table.games.students',
           h('thead', h('tr', h('th', 'Öğrenci'), h('th', 'Bulmaca puanı'), h('th', 'Tahmin Et puanı'), h('th', 'Seri'), h('th', 'Son 7 gün'), h('th', 'Zayıf temalar'), h('th', 'Ödevler'))),
           h('tbody', rows)))

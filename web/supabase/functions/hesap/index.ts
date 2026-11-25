@@ -4,6 +4,8 @@
 //   ogrenci_ac       → antrenör öğrenci hesabı açar
 //   ogrenci_guncelle → ad / grup / şifre değiştirir
 //   ogrenci_sil      → hesabı siler
+//   antrenor_ac / antrenor_guncelle / antrenor_sil → yalnızca başantrenör (akademinin sahibi)
+// Akademi: başantrenör = coach_id'si boş antrenör; diğer antrenörlerin ve öğrencilerin coach_id'si = başantrenör.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const URL_ = Deno.env.get("SUPABASE_URL")!;
@@ -49,9 +51,25 @@ async function caller(req: Request) {
   if (!token) return null;
   const { data } = await admin.auth.getUser(token);
   if (!data?.user) return null;
-  const { data: p } = await admin.from("profiles").select("id, role").eq("id", data.user.id).maybeSingle();
-  return p;
+  const { data: p } = await admin.from("profiles").select("id, role, coach_id").eq("id", data.user.id).maybeSingle();
+  if (!p) return null;
+  return { ...p, isHead: p.role === "coach" && !p.coach_id, academy: p.role === "coach" && !p.coach_id ? p.id : p.coach_id };
 }
+
+// Hoca listesi: akademideki antrenörler (başantrenör dahil). Boşsa çağıranın kendisi.
+async function validCoaches(ids: unknown, me: { id: string; academy: string }) {
+  const list = Array.isArray(ids) ? ids.map(String) : [];
+  if (!list.length) return [me.id];
+  const { data } = await admin.from("profiles").select("id").eq("role", "coach").in("id", list)
+    .or(`id.eq.${me.academy},coach_id.eq.${me.academy}`);
+  const res = (data ?? []).map((r) => r.id);
+  return res.length ? res : [me.id];
+}
+async function setCoaches(studentId: string, coachIds: string[]) {
+  await admin.from("student_coaches").delete().eq("student_id", studentId);
+  if (coachIds.length) await admin.from("student_coaches").insert(coachIds.map((c) => ({ student_id: studentId, coach_id: c })));
+}
+const cleanLesson = (v: unknown) => (v === "ozel" ? "ozel" : "grup");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -81,39 +99,59 @@ Deno.serve(async (req) => {
     if (!me) return fail("Giriş gerekli.", 401);
     if (me.role !== "coach") return fail("Bu işlem yalnızca antrenör içindir.", 403);
 
-    // Otomatik testlerin geçici hesaplarını siler: yalnızca "test." ile başlayan bir antrenör çağırabilir
-    // ve yalnızca "test." ile başlayan hesaplar silinir.
-    if (action === "test_temizle") {
-      const { data: mine } = await admin.from("profiles").select("username").eq("id", me.id).single();
-      if (!mine?.username.startsWith("test.")) return fail("Yalnızca test hesabı için.", 403);
-      const { data: list } = await admin.from("profiles").select("id, username").like("username", "test.%");
-      const others = (list ?? []).filter((p) => p.id !== me.id);
-      for (const p of others) await admin.auth.admin.deleteUser(p.id);
-      await admin.from("assignments").delete().eq("coach_id", me.id);
-      await admin.auth.admin.deleteUser(me.id);
-      return json({ ok: true, deleted: others.length + 1 });
-    }
-
     if (action === "ogrenci_ac") {
       const username = cleanUsername(body.username), name = cleanName(body.display_name);
       if (!username) return fail("Kullanıcı adı 3–32 karakter olmalı: harf, rakam, nokta, alt çizgi, tire.");
       if (!name) return fail("Öğrencinin adı gerekli.");
       if (!okPassword(body.password)) return fail("Şifre en az 6 karakter olmalı.");
       const r = await createAccount(username, body.password as string, {
-        role: "student", display_name: name, coach_id: me.id, group_name: cleanGroup(body.group_name),
+        role: "student", display_name: name, coach_id: me.academy, group_name: cleanGroup(body.group_name), lesson_type: cleanLesson(body.lesson_type),
       });
-      return r.error ? fail(r.error) : json({ ok: true, id: r.id, username });
+      if (r.error) return fail(r.error);
+      await setCoaches(r.id as string, await validCoaches(body.coach_ids, me));
+      return json({ ok: true, id: r.id, username });
+    }
+
+    // ---------- antrenörler (yalnızca başantrenör) ----------
+    if (action === "antrenor_ac" || action === "antrenor_guncelle" || action === "antrenor_sil") {
+      if (!me.isHead) return fail("Bu işlemi yalnızca başantrenör yapabilir.", 403);
+      if (action === "antrenor_ac") {
+        const username = cleanUsername(body.username), name = cleanName(body.display_name);
+        if (!username) return fail("Kullanıcı adı 3–32 karakter olmalı: harf, rakam, nokta, alt çizgi, tire.");
+        if (!name) return fail("Antrenörün adı gerekli.");
+        if (!okPassword(body.password)) return fail("Şifre en az 6 karakter olmalı.");
+        const r = await createAccount(username, body.password as string, { role: "coach", display_name: name, coach_id: me.id });
+        return r.error ? fail(r.error) : json({ ok: true, id: r.id, username });
+      }
+      const cid = String(body.id ?? "");
+      const { data: co } = await admin.from("profiles").select("id, role, coach_id").eq("id", cid).maybeSingle();
+      if (!co || co.role !== "coach" || co.coach_id !== me.id) return fail("Antrenör bulunamadı.", 404);
+      if (action === "antrenor_guncelle") {
+        if ("display_name" in body) { const n = cleanName(body.display_name); if (!n) return fail("Ad gerekli."); await admin.from("profiles").update({ display_name: n }).eq("id", cid); }
+        if ("password" in body) {
+          if (!okPassword(body.password)) return fail("Şifre en az 6 karakter olmalı.");
+          const { error } = await admin.auth.admin.updateUserById(cid, { password: body.password as string });
+          if (error) return fail("Şifre değiştirilemedi: " + error.message);
+        }
+        return json({ ok: true });
+      }
+      // antrenor_sil: ödevleri, videoları ve duyuruları başantrenöre devredilir; öğrencilerden hocalığı kalkar
+      for (const t of ["assignments", "videos", "announcements"]) await admin.from(t).update({ coach_id: me.id }).eq("coach_id", cid);
+      const { error } = await admin.auth.admin.deleteUser(cid);
+      return error ? fail(error.message) : json({ ok: true });
     }
 
     // the rest act on one of the caller's own students
     const id = String(body.id ?? "");
     const { data: st } = await admin.from("profiles").select("id, coach_id, role").eq("id", id).maybeSingle();
-    if (!st || st.coach_id !== me.id || st.role !== "student") return fail("Öğrenci bulunamadı.", 404);
+    if (!st || st.coach_id !== me.academy || st.role !== "student") return fail("Öğrenci bulunamadı.", 404);
 
     if (action === "ogrenci_guncelle") {
       const patch: Record<string, unknown> = {};
       if ("display_name" in body) { const n = cleanName(body.display_name); if (!n) return fail("Ad gerekli."); patch.display_name = n; }
       if ("group_name" in body) patch.group_name = cleanGroup(body.group_name);
+      if ("lesson_type" in body) patch.lesson_type = cleanLesson(body.lesson_type);
+      if ("coach_ids" in body) await setCoaches(id, await validCoaches(body.coach_ids, me));
       if (Object.keys(patch).length) {
         const { error } = await admin.from("profiles").update(patch).eq("id", id);
         if (error) return fail(error.message);
