@@ -11,6 +11,7 @@ import { activity, goalProgress, streak, GOAL_KINDS } from './core/activity.js';
 import { assignments, importPackage, assignmentProgress, buildReport, packageSummary } from './core/assign.js';
 import { importReports } from './modules/teacher/index.js';
 import { refreshBadges } from './core/badges.js';
+import { mountExam } from './modules/exam/index.js';
 
 const visibleModules = () => modules.filter((m) => !m.teacherOnly || store.settings.teacherMode);
 
@@ -43,6 +44,12 @@ function go(id) {
   layout(content);
   if (id === 'home') return renderHome(content);
   if (id === 'settings') return renderSettings(content);
+  if (id.startsWith('exam:')) {
+    const a = assignments.list.find((x) => x.id === id.slice(5));
+    if (!a || !a.exam) return renderHome(content);
+    mountExam(content, { assignment: a, go }).then((r) => { if (activeId === id) mounted = r; else r.unmount(); });
+    return;
+  }
   const m = modules.find((x) => x.id === id);
   if (!m) return renderHome(content);
   if (!m.ready) {
@@ -121,7 +128,9 @@ async function renderAssignments(host) {
       h('div.asg-main', h('div.asg-title', a.title, pr.complete ? h('span.chip.ok', 'Tamamlandı') : null),
         h('div.muted.small', [a.teacher ? `${a.teacher}` : null, dueTxt].filter(Boolean).join(' · ')),
         a.note ? h('div.asg-note', a.note) : null,
-        h('div.asg-parts', pr.parts.map((x) => h('button.asg-part', { onclick: () => go(x.kind === 'gtm' ? 'gtm' : x.kind === 'sets' ? 'puzzles' : 'openings') }, `${x.done}/${x.total} ${x.label}`)),
+        h('div.asg-parts', pr.parts.map((x) => x.kind === 'exam'
+            ? h('button.asg-part.exam' + (x.done ? '.done' : ''), { onclick: () => go('exam:' + a.id) }, x.done ? `📝 ${x.label} · sonuç` : '📝 Sınava gir')
+            : h('button.asg-part', { onclick: () => go(x.kind === 'gtm' ? 'gtm' : x.kind === 'sets' ? 'puzzles' : 'openings') }, `${x.done}/${x.total} ${x.label}`)),
           (a.links || []).map((l) => h('button.asg-part.lichess', { title: l.url, onclick: () => window.api.openExternal(l.url) }, '♞ ', l.title, ' ↗')))),
       h('div.asg-pct', h('div.ring', { style: { '--p': Math.round(100 * pr.pct) } }, h('span', `%${Math.round(100 * pr.pct)}`)))));
   }

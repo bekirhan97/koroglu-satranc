@@ -10,6 +10,7 @@ import { pdata, themeAnalysis, pickFrom, dueReviews } from '../modules/puzzles/d
 import { odata, repSummary, treeStats } from '../modules/openings/data.js';
 import { unpackTree } from './pgntree.js';
 import { attemptsOf, attemptStats } from '../modules/gtm/session.js';
+import { buildExam, examStore } from './exam.js';
 
 const api = window.api;
 export const PACKAGE_VERSION = 1;
@@ -64,6 +65,32 @@ export async function buildPackage({ title, note = '', due = null, goal = null, 
       if (puzzles.length) sets.push({ name: t.name, puzzles, lichess: true });
     }
   }
+  let examObj = null;
+  if (exam) {
+    // exam = { title, minutes, puzzles: { theme, count, min, max } | { setId, count }, gtmGameId, repId, openingCount }
+    let puzzles = [];
+    if (exam.puzzles && exam.puzzles.setId) {
+      const s = pdata.sets.find((x) => x.id === exam.puzzles.setId);
+      if (s) puzzles = s.puzzles.slice(0, exam.puzzles.count || s.puzzles.length);
+    } else if (exam.puzzles && exam.puzzles.count) {
+      const db = await pdata.loadDb();
+      const seen = new Set();
+      for (let i = 0; i < exam.puzzles.count; i++) {
+        const t = exam.puzzles;
+        const p = pickFrom(db, { target: t.min + ((t.max - t.min) * (i + 0.5)) / t.count, theme: t.theme || undefined, seen });
+        if (!p) break;
+        seen.add(p.id); puzzles.push({ ...p, firstAuto: true });
+      }
+    }
+    let gtm = null;
+    const gg = exam.gtmGameId && store.games.find((g) => g.id === exam.gtmGameId);
+    if (gg) gtm = { game: gg, analysis: await store.loadAnalysis(gg.id) };
+    let opening = null;
+    const rr = exam.repId && odata.reps.find((x) => x.id === exam.repId);
+    if (rr) opening = { rep: { name: rr.name, color: rr.color, roots: (await api.read('openings/tree-' + rr.id, { roots: [] })).roots }, count: exam.openingCount || 10 };
+    examObj = buildExam({ title: exam.title, minutes: exam.minutes, puzzles, opening, gtm });
+    if (!Object.keys(examObj.sections).length) examObj = null;
+  }
   const reps = [];
   for (const r of odata.reps.filter((x) => repIds.includes(x.id))) {
     const tree = await api.read('openings/tree-' + r.id, { roots: [] });
@@ -74,7 +101,7 @@ export async function buildPackage({ title, note = '', due = null, goal = null, 
     teacher: store.profile.name, createdAt: Date.now(),
     gtm: { games, analysis }, sets, reps,
     links: links.filter((l) => isLichessUrl(l.url)).map((l) => ({ title: String(l.title || 'Lichess turnuvası').slice(0, 80), url: l.url.trim() })),
-    exam,
+    exam: examObj,
   };
 }
 
@@ -132,7 +159,7 @@ export async function importPackage(pkg) {
   if (items.reps.length) await odata.saveIndex();
 
   const links = (pkg.links || []).filter((l) => isLichessUrl(l.url));
-  assignments.list.push({ id: pkg.id, title: pkg.title, teacher: pkg.teacher, note: pkg.note || '', due: pkg.due || null, goal: pkg.goal || null, createdAt: pkg.createdAt, receivedAt: Date.now(), items, links });
+  assignments.list.push({ id: pkg.id, title: pkg.title, teacher: pkg.teacher, note: pkg.note || '', due: pkg.due || null, goal: pkg.goal || null, createdAt: pkg.createdAt, receivedAt: Date.now(), items, links, exam: pkg.exam || null });
   await assignments.save();
   return { duplicate: false, items };
 }
@@ -167,6 +194,10 @@ export async function assignmentProgress(a) {
       done += s.learned; total += s.total;
     }
     parts.push({ kind: 'reps', label: 'açılış pozisyonu', done, total });
+  }
+  if (a.exam) {
+    const st = await examStore.get(a.exam.id);
+    parts.push({ kind: 'exam', label: st && st.finishedAt ? `sınav (${st.score} puan)` : 'sınav', done: st && st.finishedAt ? 1 : 0, total: 1 });
   }
   const fr = parts.filter((p) => p.total).map((p) => p.done / p.total);
   const pct = fr.length ? fr.reduce((x, y) => x + y, 0) / fr.length : 1;

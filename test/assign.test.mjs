@@ -101,3 +101,22 @@ test('Lichess bağlantıları: yalnızca lichess.org adresleri pakete girer', as
   await importPackage(JSON.parse(JSON.stringify({ ...p, links: [...p.links, { title: 'x', url: 'javascript:alert(1)' }] })));
   assert.deepEqual(assignments.list[0].links.map((l) => l.title), ['Cumartesi']);
 });
+
+test('pakette sınav: öğrenciye ulaşır, ödev ilerlemesine girer', async () => {
+  await resetAs('Hoca');
+  const g = parseGame(GAME, 'Morphy'); store.games.push(g);
+  const id = await odata.add({ name: 'İtalyan', color: 'w', roots: parsePgnTree(REP).roots });
+  const p = JSON.parse(JSON.stringify(await buildPackage({ title: 'Ay sonu', exam: { title: 'Kasım sınavı', minutes: 15, puzzles: { theme: 'fork', count: 5, min: 1000, max: 1400 }, gtmGameId: g.id, repId: id, openingCount: 3 } })));
+  assert.equal(p.exam.title, 'Kasım sınavı');
+  assert.equal(p.exam.sections.puzzles.length, 5);
+  assert.ok(p.exam.sections.openings.questions.length >= 2);
+  assert.ok(p.exam.sections.gtm.questions.length >= 1);
+  await resetAs('Zeynep');
+  await importPackage(p);
+  const pr = await assignmentProgress(assignments.list[0]);
+  assert.deepEqual(pr.parts.map((x) => x.kind), ['exam']);
+  globalThis.__mem.set('exams', { [p.exam.id]: { finishedAt: Date.now(), score: 80, startedAt: Date.now() - 1000, answers: {} } });
+  const pr2 = await assignmentProgress(assignments.list[0]);
+  assert.equal(pr2.parts[0].label, 'sınav (80 puan)');
+  assert.ok(pr2.complete);
+});
