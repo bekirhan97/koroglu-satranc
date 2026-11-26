@@ -103,7 +103,7 @@ async function coachView(body, me) {
       return h('button.lesson' + (l.cancelled ? '.cancelled' : '') + (l.kind === 'ozel' ? '.ozel' : '') + (l.kind === 'tek' ? '.tek' : ''), { onclick: () => lessonDialog(l, att, me, draw) },
         h('div.lesson-time', `${l.start}–${endTime(l.start, l.duration)}`),
         h('div.lesson-name', l.name),
-        h('div.lesson-meta', [coachShort(l.coach_ids), `${l.student_ids.length} öğr.`, l.location].filter(Boolean).join(' · ')),
+        h('div.lesson-meta', [coachShort(l.coach_ids), `${l.student_ids.length} öğr.`, placeText(l.location)].filter(Boolean).join(' · ')),
         l.cancelled ? h('span.chip.warn', 'İptal') : att.length ? h('span.chip.ok', `Yoklama ${came}/${l.student_ids.length}`) : null,
         l.makeup ? h('span.chip', 'Telafi') : null,
         l.session && l.session.finished_at ? h('span.chip.ok', '📋 rapor') : l.note ? h('span.chip', '📝 not') : null);
@@ -247,7 +247,7 @@ function lessonDialog(l, att, me, done) {
   });
   const allCame = h('button.btn.small', { onclick: () => { for (const sid of l.student_ids) marks[sid] = 'geldi'; body.querySelectorAll('.att-btn').forEach((b) => b.classList.toggle('on', b.classList.contains('geldi'))); } }, 'Hepsi geldi');
   const body = h('div.form-col',
-    h('div.muted', `${DAYS[(parseKey(l.date).getDay() + 6) % 7]} ${fmtDate(parseKey(l.date))} · ${l.start}–${endTime(l.start, l.duration)}`, l.location ? ` · ${l.location}` : '', l.coach_ids.length ? ` · ${coachShort(l.coach_ids)}` : ''),
+    h('div.muted', `${DAYS[(parseKey(l.date).getDay() + 6) % 7]} ${fmtDate(parseKey(l.date))} · ${l.start}–${endTime(l.start, l.duration)}`, l.location ? ` · ${placeText(l.location)}` : '', l.coach_ids.length ? ` · ${coachShort(l.coach_ids)}` : '', l.cancelled ? '' : joinBtn(l.location, '.ml') || ''),
     l.cancelled ? h('div.chip.warn', 'Bu ders iptal edildi') : null,
     h('div.form-l', 'Yoklama', h('span.spacer'), l.student_ids.length ? allCame : null),
     l.student_ids.length ? h('div.att-list', rows) : h('div.muted.small', 'Bu derse kayıtlı öğrenci yok.'),
@@ -308,7 +308,7 @@ function lessonDialog(l, att, me, done) {
 function classesDialog(classes, me, done) {
   const list = h('div.class-list', classes.length ? classes.map((c) => h('div.class-row',
     h('div', h('b', c.name), ' ', c.kind === 'ozel' ? h('span.chip.ozel', 'Özel ders') : null,
-      h('div.muted.small', [`${DAYS[c.weekday - 1]} ${hm(c.start_time)}–${endTime(c.start_time, c.duration_min)}`, c.location, coachShort(c.coach_ids), `${(c.class_members || []).length} öğrenci`].filter(Boolean).join(' · '))),
+      h('div.muted.small', [`${DAYS[c.weekday - 1]} ${hm(c.start_time)}–${endTime(c.start_time, c.duration_min)}`, placeText(c.location), coachShort(c.coach_ids), `${(c.class_members || []).length} öğrenci`].filter(Boolean).join(' · '))),
     h('button.btn.small', { onclick: () => { m.close(); classEditDialog(c, me, done); } }, 'Düzenle')))
     : h('div.muted', 'Henüz grup ya da özel ders yok.'));
   const m = modal({ title: 'Gruplar ve özel dersler', wide: true, body: h('div', h('p.muted.small', 'Her satır her hafta aynı gün ve saatte tekrarlanan bir derstir. Grup dersinin adı, öğrencilerin "grup" bilgisi olarak da kullanılır (duyurular, sıralama, filtreler).'), list),
@@ -316,6 +316,19 @@ function classesDialog(classes, me, done) {
 }
 
 function field(label, input, hint) { return h('label.form-row', h('span.form-l', label), input, hint ? h('span.muted.small', hint) : null); }
+
+// "Yer" can hold a lesson link (Zoom/Meet/Lichess…): show it as a join button instead of raw text.
+export function lessonLink(loc) {
+  const t = (loc || '').trim();
+  if (!t || /\s/.test(t)) return null;
+  const u = /^https?:\/\//i.test(t) ? t : /^[\w-]+(\.[\w-]+)+\/\S*$/.test(t) ? 'https://' + t : null;
+  try { return u && /^https?:$/.test(new URL(u).protocol) ? u : null; } catch { return null; }
+}
+const placeText = (loc) => (lessonLink(loc) ? 'Online' : loc);
+const joinBtn = (loc, cls = '') => {
+  const u = lessonLink(loc);
+  return u ? h('a.btn.small.join-btn' + cls, { href: u, target: '_blank', rel: 'noopener noreferrer', onclick: (e) => e.stopPropagation() }, '🎥 Derse katıl') : null;
+};
 
 async function classEditDialog(c, me, done) {
   const students = Object.values(meta.students).sort((a, b) => a.display_name.localeCompare(b.display_name, 'tr'));
@@ -325,7 +338,7 @@ async function classEditDialog(c, me, done) {
   const day = h('select', DAYS.map((d, i) => h('option', { value: i + 1, selected: c ? c.weekday === i + 1 : i === 5 }, d)));
   const time = h('input', { type: 'time', value: c ? hm(c.start_time) : '10:00' });
   const dur = h('select', [45, 60, 75, 90, 120, 150, 180].map((m) => h('option', { value: m, selected: (c ? c.duration_min : 60) === m }, `${m} dk`)));
-  const loc = h('input', { value: c ? c.location || '' : '', placeholder: 'Örn. Salon 1 / Online' });
+  const loc = h('input', { value: c ? c.location || '' : '', placeholder: 'Zoom / Meet bağlantısını yapıştır (ya da Online)' });
   const coachSet = new Set(c ? c.coach_ids : [me.id]);
   const memberSet = new Set(c ? (c.class_members || []).map((x) => x.student_id) : []);
   const kindSeg = h('div.seg', [['grup', 'Grup dersi'], ['ozel', 'Özel ders']].map(([k, l]) => h('button' + (k === kind ? '.active' : ''), { type: 'button', onclick: (e) => { kind = k; [...e.target.parentNode.children].forEach((b) => b.classList.remove('active')); e.target.classList.add('active'); } }, l)));
@@ -372,7 +385,7 @@ async function classEditDialog(c, me, done) {
   modal({ title: c ? c.name : 'Yeni grup / özel ders', wide: true, actions,
     body: h('div.form-col',
       field('Tür', kindSeg), field('Ad', name, 'Grup dersinde öğrencilerin grup adı olur. Özel derste örn. "Özel – Ali Yılmaz".'),
-      h('div.form-grid', field('Gün', day), field('Başlangıç', time), field('Süre', dur), field('Yer', loc)),
+      h('div.form-grid', field('Gün', day), field('Başlangıç', time), field('Süre', dur), field('Ders bağlantısı', loc)),
       coaches.length ? field('Hocaları', h('div.coach-pick', coaches.map((co) => h('label.chk', h('input', { type: 'checkbox', checked: coachSet.has(co.id), onchange: (e) => { if (e.target.checked) coachSet.add(co.id); else coachSet.delete(co.id); } }), ' ', co.display_name)))) : null,
       h('div.form-l', 'Öğrenciler'), search, stList, attHost) });
 }
@@ -396,11 +409,11 @@ function oneOffDialog(me, done) {
   const date = h('input', { type: 'date', value: dateKey(new Date()) });
   const time = h('input', { type: 'time', value: '10:00' });
   const dur = h('select', [45, 60, 75, 90, 120].map((m) => h('option', { value: m, selected: m === 60 }, `${m} dk`)));
-  const loc = h('input', { placeholder: 'Yer (isteğe bağlı)' });
+  const loc = h('input', { placeholder: 'Zoom / Meet bağlantısı (isteğe bağlı)' });
   const makeup = h('input', { type: 'checkbox' });
   const coachSet = new Set([me.id]), memberSet = new Set();
   modal({ title: 'Tek seferlik ders', wide: true,
-    body: h('div.form-col', field('Başlık', title), h('div.form-grid', field('Tarih', date), field('Saat', time), field('Süre', dur), field('Yer', loc)),
+    body: h('div.form-col', field('Başlık', title), h('div.form-grid', field('Tarih', date), field('Saat', time), field('Süre', dur), field('Ders bağlantısı', loc)),
       h('label.chk', makeup, ' Telafi dersi'),
       coaches.length > 1 ? field('Hocaları', h('div.coach-pick', coaches.map((co) => h('label.chk', h('input', { type: 'checkbox', checked: coachSet.has(co.id), onchange: (e) => { if (e.target.checked) coachSet.add(co.id); else coachSet.delete(co.id); } }), ' ', co.display_name)))) : null,
       h('div.form-l', 'Öğrenciler'), h('div.pick-list', students.map((s) => h('label.pick', h('input', { type: 'checkbox', onchange: (e) => { if (e.target.checked) memberSet.add(s.id); else memberSet.delete(s.id); } }), h('span', s.display_name), h('span.muted.small', s.group_name ? ' · ' + s.group_name : ''))))),
@@ -450,7 +463,7 @@ async function studentView(body) {
   const attLabel = { geldi: '✓ Geldin', gelmedi: '✗ Gelmedin', mazeretli: 'Mazeretli' };
   clear(body).append(h('div.schedule-student',
     h('div.panel', h('div.panel-title', 'Sonraki derslerin'),
-      next.length ? next.map((l) => h('div.next-row' + (l.cancelled ? '.cancelled' : ''), h('b', l.dayLabel), h('span', `${l.start}–${endTime(l.start, l.duration)}`), h('span', l.name), l.location ? h('span.muted.small', l.location) : null,
+      next.length ? next.map((l) => h('div.next-row' + (l.cancelled ? '.cancelled' : ''), h('b', l.dayLabel), h('span', `${l.start}–${endTime(l.start, l.duration)}`), h('span', l.name), l.location && !lessonLink(l.location) ? h('span.muted.small', l.location) : null, l.cancelled ? null : joinBtn(l.location),
         l.cancelled ? h('span.chip.warn', 'İptal') : null, l.makeup ? h('span.chip', 'Telafi') : null))
         : h('div.muted', 'Önümüzdeki günlerde dersin görünmüyor.')),
     h('div.panel', h('div.panel-title', 'Geçmiş dersler'),
@@ -491,7 +504,7 @@ export function homeNextLesson(go) {
   nextLessons(1).then(([l]) => {
     if (!l) return;
     host.append(h('div.panel.next-lesson' + (l.cancelled ? '.cancelled' : ''), { onclick: () => go('program') },
-      h('div.nl-icon', '📅'), h('div', h('div.muted.small', l.cancelled ? 'Ders iptal edildi' : 'Sonraki dersin'), h('b', `${l.dayLabel} ${l.start}`), ' · ', l.name, l.location ? h('span.muted.small', ` · ${l.location}`) : null)));
+      h('div.nl-icon', '📅'), h('div', h('div.muted.small', l.cancelled ? 'Ders iptal edildi' : 'Sonraki dersin'), h('b', `${l.dayLabel} ${l.start}`), ' · ', l.name, l.location && !lessonLink(l.location) ? h('span.muted.small', ` · ${l.location}`) : null), l.cancelled ? null : joinBtn(l.location, '.big')));
   }).catch(() => {});
   return host;
 }

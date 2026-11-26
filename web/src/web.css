@@ -367,3 +367,10 @@ table.lb tr.me td { background: #fff3d6; font-weight: 700; }
 .eg-import td { vertical-align: middle; padding: 4px 6px; }
 .eg-thumb.xs svg { width: 64px; height: 64px; }
 .imp-title { width: 100%; min-width: 180px; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; }
+
+/* ---------- Ders bağlantısı (Zoom/Meet) ---------- */
+.join-btn { background: #1f7a4d; color: #fff !important; border-color: #1f7a4d; text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.join-btn:hover { background: #18633e; }
+.join-btn.ml { margin-left: 8px; }
+.next-lesson .join-btn.big { margin-left: auto; padding: 8px 14px; font-size: 14px; }
+.next-row .join-btn { margin-left: auto; }
