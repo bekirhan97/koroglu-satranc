@@ -142,6 +142,7 @@ async function start() {
   ensureRegistered().catch(() => {});
   if (playToken()) live.start();
   if (me.role === 'student') { await syncAssignments(); scheduleReport(lr && lr.username ? 1000 : 5000); }
+  else scheduleReport(8000);
   if (me.role === 'coach') await syncReports();
   // a notification opens the site with #page (e.g. #program)
   const start = location.hash.slice(1);
@@ -170,7 +171,7 @@ async function syncAssignments() {
 // Student: the progress report the coach sees (same content as the desktop .krapor file).
 let reportTimer = null;
 function scheduleReport(delay = 30000) {
-  if (!me || me.role !== 'student') return;
+  if (!me) return; // coaches send one too: it feeds the coaches' own ranking (Sıralama → Hocalar)
   clearTimeout(reportTimer);
   reportTimer = setTimeout(sendReport, delay);
 }

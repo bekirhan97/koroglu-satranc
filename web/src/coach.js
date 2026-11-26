@@ -15,8 +15,10 @@ export async function syncReports() {
   const { data, error } = await supa.from('reports').select('student_id, report');
   if (error) return 0;
   await students.load();
-  for (const row of data) { try { students.add(row.report); } catch (e) { /* ignore */ } }
-  const ids = new Set(data.map((r) => r.student_id));
+  // a coach's own row (sent for the coaches' ranking) is not a student
+  const rows = data.filter((r) => meta.students[r.student_id]);
+  for (const row of rows) { try { students.add(row.report); } catch (e) { /* ignore */ } }
+  const ids = new Set(rows.map((r) => r.student_id));
   for (const id of Object.keys(students.map)) if (!ids.has(id)) delete students.map[id];
   await students.save();
   return data.length;

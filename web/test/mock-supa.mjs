@@ -115,12 +115,12 @@ export function createMock() {
     }
     if (p === '/rest/v1/rpc/leaderboard2') {
       const b = JSON.parse(req.postData() || '{}'); const uid = userFromReq(req); const me = prof(uid);
-      const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === academyOf(me) && (x.leaderboard_ok || x.id === uid) && (b.scope !== 'group' || (() => { const g = me.role === 'coach' ? b.grp : (b.grp && myGroupsMock(me).includes(b.grp) ? b.grp : me.group_name); return x.group_name === g || groupsOfMock(x.id).includes(g); })()));
+      const team = b.scope === 'coaches' ? (me.role === 'coach' ? db.profiles.filter((x) => x.role === 'coach' && (x.id === academyOf(me) || x.coach_id === academyOf(me))) : []) : db.profiles.filter((x) => x.role === 'student' && x.coach_id === academyOf(me) && (x.leaderboard_ok || x.id === uid) && (b.scope !== 'group' || (() => { const g = me.role === 'coach' ? b.grp : (b.grp && myGroupsMock(me).includes(b.grp) ? b.grp : me.group_name); return x.group_name === g || groupsOfMock(x.id).includes(g); })()));
       const rows = team.map((t) => { let v = 0;
         if (b.kind === 'toplam' || ['openings', 'endgames', 'videos', 'gtmGames', 'playGames', 'lichessGames'].includes(b.kind)) { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; const ds = r ? r.activity.days.slice(-7) : []; v = b.kind === 'toplam' ? ds.reduce((a, d) => a + dayPoints(d), 0) : ds.reduce((a, d) => a + (d[b.kind] || 0), 0); }
         else if (b.kind === 'antrenman') { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; v = r ? (b.period === 'all' ? r.ratings.puzzles.r : r.activity.days.slice(-7).reduce((a, d) => a + (d.puzzles || 0) + (d.reviews || 0), 0)) : 0; }
         else v = Math.max(0, ...db.scores.filter((x) => x.student_id === t.id && x.kind === b.kind).map((x) => x.score));
-        return { name: t.display_name.split(' ')[0] + ' ' + t.display_name.split(' ').pop()[0] + '.', is_me: t.id === uid, group_name: t.group_name, value: v }; }).filter((r) => r.value > 0 || r.is_me);
+        return { name: t.role === 'coach' ? t.display_name : t.display_name.split(' ')[0] + ' ' + t.display_name.split(' ').pop()[0] + '.', is_me: t.id === uid, group_name: t.role === 'coach' ? (t.coach_id ? 'Antrenör' : 'Başantrenör') : t.group_name, value: v }; }).filter((r) => r.value > 0 || r.is_me || b.scope === 'coaches').sort((a, b2) => b2.value - a.value);
       return json(route, 200, rows);
     }
     if (p === '/rest/v1/rpc/set_leaderboard_ok') { const b = JSON.parse(req.postData() || '{}'); const st = db.profiles.find((x) => x.id === b.student); st.leaderboard_ok = b.ok; return json(route, 204); }

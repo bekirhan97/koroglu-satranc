@@ -58,7 +58,7 @@ export function rankingView({ isCoach = false, myGroup = null, groups = [] } = {
   const body = h('div.panel.lb-panel');
   const seg = (items, key, onPick) => h('div.seg.lb-seg', items.map(([k, l]) => h('button' + (st[key] === k ? '.active' : ''), { onclick: () => { st[key] = k; onPick && onPick(); draw(); } }, l)));
   async function draw() {
-    const scopeItems = isCoach ? [['academy', 'Akademi geneli'], ...(groups.length ? [['group', 'Grup']] : [])] : [...(myGroup ? [['group', groups.length > 1 ? 'Grubum' : `Grubum (${myGroup})`]] : []), ['academy', 'Akademi geneli']];
+    const scopeItems = isCoach ? [['academy', 'Akademi geneli'], ...(groups.length ? [['group', 'Grup']] : []), ['coaches', '🎓 Hocalar']] : [...(myGroup ? [['group', groups.length > 1 ? 'Grubum' : `Grubum (${myGroup})`]] : []), ['academy', 'Akademi geneli']];
     clear(root).append(
       h('div.lb-controls',
         h('div.btn-row', h('select.filter-sel.lb-kind', { onchange: (e) => { st.kind = e.target.value; draw(); } },
@@ -73,7 +73,8 @@ export function rankingView({ isCoach = false, myGroup = null, groups = [] } = {
       const rows = await fetchRanking(st.kind, st.period, st.scope, st.scope === 'group' ? st.grp : null);
       clear(body).append(...[
         h('div.panel-title', `${KINDS.find((k) => k[0] === st.kind)[1]} · ${PERIODS.find((p) => p[0] === st.period)[1]}`),
-        table(rows, st.kind, st.period, { showGroup: st.scope === 'academy' }),
+        table(rows, st.kind, st.period, { showGroup: st.scope === 'academy' || st.scope === 'coaches' }),
+        st.scope === 'coaches' ? h('div.muted.small', '🎓 Yalnızca hocalar görür. Öğrencilerin sıralamasında hocalar yoktur.') : null,
         h('div.muted.small', st.kind === 'toplam' ? 'Bütün çalışmalardan toplanan puan (bulmaca, tekrar, açılış, oyunsonu, video, Tahmin Et, Pozisyondan Oyna, Lichess).'
           : COUNT_UNIT[st.kind] ? (st.period === 'all' ? 'Bugüne kadar toplam.' : 'Bu dönemde toplam.')
           : st.kind === 'antrenman'

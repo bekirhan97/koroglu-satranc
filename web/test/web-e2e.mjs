@@ -577,6 +577,13 @@ await c.click('.modal button:has-text("Yeni şifreyi kaydet")'); await c.waitFor
 console.log('  onay:', (await c.locator('.modal .cred').textContent()).replace(/\s+/g, ' '));
 await c.click('.modal button:has-text("Tamam")'); await c.waitForTimeout(300);
 console.log('  yeni şifreyle giriş (sonda boşlukla):', await tryLogin('yeni-sifre-77 '), '· eski şifre:', await tryLogin('x123456'));
+step('hoca sıralaması');
+await nav(c, 'Antrenör'); await c.waitForTimeout(800); await c.click('.tab:has-text("Sıralama")'); await c.waitForTimeout(1500);
+await c.click('.lb-controls button:has-text("Hocalar")'); await c.waitForTimeout(1200);
+console.log('  hocalar:', (await c.locator('.lb-panel').first().textContent()).replace(/\s+/g, ' ').slice(0, 160));
+const coachId = MOCK.db.profiles.find((p) => p.username === 'test.antrenor').id;
+console.log('  hoca raporu gönderildi:', MOCK.db.reports.some((r) => r.student_id === coachId), '· öğrenci listesinde hoca yok:', !(await c.evaluate(async (id) => { const r = await window.api.read('teacher/students', {}); return Object.values(r || {}).some((x) => x.id === id || x.name === 'Test Antrenör'); }, coachId)));
+await shot(c, '46-hoca-siralamasi');
 step('bildirim tetikleri');
 const kinds = MOCK.pushes.filter((b) => b.action === 'gonder').map((b) => b.title + ' → ' + b.ids.length);
 console.log('  gönderilen bildirimler:', kinds.join(' | '));
