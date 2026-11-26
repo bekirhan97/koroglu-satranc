@@ -11,7 +11,8 @@ export const supa = createClient(SUPABASE_URL, SUPABASE_KEY, {
 
 export const usernameToEmail = (u) => `${cleanUsername(u)}@${EMAIL_DOMAIN}`;
 export function cleanUsername(u) {
-  return String(u || '').trim().toLowerCase()
+  // Turkish keyboards may capitalise the first letter (İ → "i̇" with a combining dot after toLowerCase)
+  return String(u || '').trim().replace(/İ/g, 'i').replace(/I/g, 'i').toLowerCase().replace(/\u0307/g, '')
     .replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u');
 }
 

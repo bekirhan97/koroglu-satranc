@@ -109,7 +109,7 @@ export function accountsHooks(me) {
             } })),
             h('td.acc-actions',
               h('button.btn.small', { onclick: () => editDialog(s, groups, coaches, redraw) }, 'Düzenle'),
-              h('button.btn.small', { onclick: () => passwordDialog(s) }, 'Şifre'),
+              h('button.btn.small', { onclick: () => passwordDialog(s), title: 'Mevcut şifre görüntülenemez; yeni şifre verilir' }, 'Yeni şifre ver'),
               h('button.btn.small.ghost', { onclick: () => deleteDialog(s, redraw) }, 'Sil')))))))
           : all.length ? h('div.empty', 'Bu filtrede öğrenci yok.') : h('div.empty', h('div.big-icon', '👥'), h('h3', 'Henüz öğrenci hesabı yok'),
             h('p', 'Her öğrenci için bir kullanıcı adı ve ilk şifre belirleyin. Öğrenciye bu ikisini verin; telefondan, tabletten ya da bilgisayardan bu siteye girer.'),
@@ -227,7 +227,7 @@ export function accountsHooks(me) {
             h('td.num', count(c.id)),
             h('td.acc-actions', c.coach_id ? [
               h('button.btn.small', { onclick: () => coachEditDialog(c, redraw) }, 'Düzenle'),
-              h('button.btn.small', { onclick: () => coachPasswordDialog(c) }, 'Şifre'),
+              h('button.btn.small', { onclick: () => coachPasswordDialog(c) }, 'Yeni şifre ver'),
               h('button.btn.small.ghost', { onclick: () => coachDeleteDialog(c, redraw) }, 'Sil')] : h('span.muted.small', 'siz'))))))),
         h('p.muted.small', 'Bir antrenör silinirse verdiği ödevler, eklediği videolar ve duyurular size geçer; öğrenciler etkilenmez.')));
     },
@@ -319,11 +319,11 @@ function createDialog(groups, coaches, me, done) {
       field('Ders türü', lesson.el), field('Grup', grp, 'Grup dersi için ders saati/grup adı; özel derste boş bırakılabilir.'), dl,
       coaches.length > 1 ? field('Hocaları', cp.el, 'Öğrencinin dersini veren antrenör(ler). Duyurular yalnızca hocalarından gelir.') : null),
     actions: [{ label: 'Vazgeç' }, { label: 'Hesabı aç', primary: true, onClick: () => {
-      hesap('ogrenci_ac', { display_name: name.value, username: user.value, password: pass.value, group_name: grp.value, lesson_type: lesson.get(), coach_ids: cp.get() })
+      hesap('ogrenci_ac', { display_name: name.value, username: user.value, password: (pass.value = pass.value.trim()), group_name: grp.value, lesson_type: lesson.get(), coach_ids: cp.get() })
         .then((r) => {
           modal({ title: 'Hesap açıldı', body: h('div', h('p', h('b', name.value.trim())),
             h('div.cred', h('div', 'Site: ', h('b', location.origin + location.pathname)), h('div', 'Kullanıcı adı: ', h('b', r.username)), h('div', 'Şifre: ', h('b', pass.value))),
-            h('p.muted.small', 'Bu bilgileri öğrenciye ya da velisine iletin. Şifreyi daha sonra görüntüleyemezsiniz; unutulursa "Şifre" düğmesiyle yenisini verirsiniz.')),
+            h('p.muted.small', 'Bu bilgileri şimdi öğrenciye ya da velisine iletin. Şifre daha sonra görüntülenemez; unutulursa "Yeni şifre ver" düğmesiyle yenisini verirsiniz (eski şifre o zaman çalışmaz).')),
           actions: [{ label: 'Bilgileri kopyala', onClick: () => { navigator.clipboard?.writeText(`Köroğlu Satranç Öğrenci Sistemi\n${location.origin + location.pathname}\nKullanıcı adı: ${r.username}\nŞifre: ${pass.value}`); toast('Kopyalandı', 'ok'); return false; } },
             { label: 'Tamam', primary: true }] });
           done();
@@ -358,7 +358,7 @@ function coachCreateDialog(done) {
   name.addEventListener('input', () => { if (!userTouched) user.value = suggestUsername(name.value); });
   modal({ title: 'Antrenör hesabı aç', body: h('div.form-col', field('Ad soyad', name), field('Kullanıcı adı', user), field('İlk şifre', pass, 'Antrenör girdikten sonra Ayarlar\'dan değiştirebilir.')),
     actions: [{ label: 'Vazgeç' }, { label: 'Hesabı aç', primary: true, onClick: () => {
-      hesap('antrenor_ac', { display_name: name.value, username: user.value, password: pass.value })
+      hesap('antrenor_ac', { display_name: name.value, username: user.value, password: (pass.value = pass.value.trim()) })
         .then((r) => {
           modal({ title: 'Antrenör hesabı açıldı', body: h('div', h('p', h('b', name.value.trim())),
             h('div.cred', h('div', 'Site: ', h('b', location.origin + location.pathname)), h('div', 'Kullanıcı adı: ', h('b', r.username)), h('div', 'Şifre: ', h('b', pass.value)))),
@@ -376,15 +376,7 @@ function coachEditDialog(c, done) {
       hesap('antrenor_guncelle', { id: c.id, display_name: name.value }).then(() => { toast('Kaydedildi', 'ok'); done(); }).catch((e) => toast(e.message, 'error'));
     } }] });
 }
-function coachPasswordDialog(c) {
-  const pass = h('input', { value: randomPassword() });
-  modal({ title: `${c.display_name}: yeni şifre`, body: h('div.form-col', field('Yeni şifre', pass)),
-    actions: [{ label: 'Vazgeç' }, { label: 'Şifreyi değiştir', primary: true, onClick: () => {
-      hesap('antrenor_guncelle', { id: c.id, password: pass.value })
-        .then(() => modal({ title: 'Şifre değişti', body: h('div.cred', h('div', 'Kullanıcı adı: ', h('b', c.username)), h('div', 'Yeni şifre: ', h('b', pass.value))), actions: [{ label: 'Tamam', primary: true }] }))
-        .catch((e) => toast(e.message, 'error'));
-    } }] });
-}
+function coachPasswordDialog(c) { newPasswordDialog({ who: c.display_name, username: c.username, action: 'antrenor_guncelle', id: c.id, title: 'Köroğlu Satranç Öğrenci Sistemi (antrenör)' }); }
 function coachDeleteDialog(c, done) {
   modal({ title: 'Antrenör hesabı silinsin mi?', body: h('div', h('p', h('b', c.display_name), ` (@${c.username}) artık giriş yapamayacak.`), h('p', 'Verdiği ödevler, eklediği videolar ve duyurular size geçer. Öğrenciler ve çalışmaları silinmez.')),
     actions: [{ label: 'Vazgeç' }, { label: 'Sil', primary: true, onClick: () => {
@@ -392,15 +384,25 @@ function coachDeleteDialog(c, done) {
     } }] });
 }
 
-function passwordDialog(s) {
-  const pass = h('input', { value: randomPassword() });
-  modal({ title: `${s.display_name}: yeni şifre`, body: h('div.form-col', field('Yeni şifre', pass, 'Eski şifre geçersiz olur. Öğrenci açık oturumlarında çalışmaya devam edebilir.')),
-    actions: [{ label: 'Vazgeç' }, { label: 'Şifreyi değiştir', primary: true, onClick: () => {
-      hesap('ogrenci_guncelle', { id: s.id, password: pass.value })
-        .then(() => modal({ title: 'Şifre değişti', body: h('div.cred', h('div', 'Kullanıcı adı: ', h('b', s.username)), h('div', 'Yeni şifre: ', h('b', pass.value))), actions: [{ label: 'Tamam', primary: true }] }))
+// The current password can never be shown (only its hash is stored). This dialog SETS a new one; until
+// "Yeni şifreyi kaydet" is pressed nothing changes — the suggestion in the box is not the student's password.
+function newPasswordDialog({ who, username, action, id, title }) {
+  const pass = h('input', { value: randomPassword(), autocapitalize: 'off', spellcheck: 'false' });
+  modal({ title: `${who}: yeni şifre ver`, body: h('div.form-col',
+    h('div.warn-box', '⚠️ Mevcut şifre güvenlik nedeniyle görüntülenemez. Kutudaki şifre ', h('b', 'henüz geçerli değil'), '; "Yeni şifreyi kaydet"e basınca geçerli olur ve eski şifre çalışmaz.'),
+    field('Yeni şifre', pass, 'İsterseniz değiştirin (en az 6 karakter).')),
+    actions: [{ label: 'Vazgeç' }, { label: 'Yeni şifreyi kaydet', primary: true, onClick: () => {
+      const pw = pass.value.trim();
+      if (pw.length < 6) { toast('Şifre en az 6 karakter olmalı', 'error'); return false; }
+      hesap(action, { id, password: pw })
+        .then(() => modal({ title: 'Yeni şifre geçerli ✓', body: h('div', h('div.cred', h('div', 'Site: ', h('b', location.origin + location.pathname)), h('div', 'Kullanıcı adı: ', h('b', username)), h('div', 'Şifre: ', h('b', pw))),
+          h('p.muted.small', 'Bu bilgileri şimdi iletin; şifre daha sonra görüntülenemez. Eski şifre artık çalışmaz.')),
+          actions: [{ label: 'Bilgileri kopyala', onClick: () => { navigator.clipboard?.writeText(`${title}\n${location.origin + location.pathname}\nKullanıcı adı: ${username}\nŞifre: ${pw}`); toast('Kopyalandı', 'ok'); return false; } },
+            { label: 'Tamam', primary: true }] }))
         .catch((e) => toast(e.message, 'error'));
     } }] });
 }
+function passwordDialog(s) { newPasswordDialog({ who: s.display_name, username: s.username, action: 'ogrenci_guncelle', id: s.id, title: 'Köroğlu Satranç Öğrenci Sistemi' }); }
 
 function deleteDialog(s, done) {
   modal({ title: 'Hesap silinsin mi?', body: h('div', h('p', h('b', s.display_name), ` (@${s.username}) hesabı ve bütün çalışmaları kalıcı olarak silinecek.`), h('p.bad-text', 'Bu işlem geri alınamaz.')),

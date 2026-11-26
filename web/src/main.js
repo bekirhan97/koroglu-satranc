@@ -52,7 +52,7 @@ async function showLogin() {
   try { hasCoach = (await hesap('durum')).hasCoach; } catch (e) { /* offline: show login anyway */ }
   if (!hasCoach) return showSetup();
   const user = h('input.big-input', { placeholder: 'Kullanıcı adı', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false' });
-  const pass = h('input.big-input', { type: 'password', placeholder: 'Şifre', autocomplete: 'current-password' });
+  const pass = h('input.big-input', { type: 'password', placeholder: 'Şifre', autocomplete: 'current-password', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false' });
   const err = h('div.login-err');
   const btn = h('button.btn.primary.big', 'Giriş yap');
   const submit = async (e) => {
@@ -60,7 +60,7 @@ async function showLogin() {
     err.textContent = '';
     if (!user.value.trim() || !pass.value) { err.textContent = 'Kullanıcı adı ve şifre girin.'; return; }
     btn.disabled = true; btn.textContent = 'Giriş yapılıyor…';
-    const { error } = await supa.auth.signInWithPassword({ email: usernameToEmail(user.value), password: pass.value });
+    const { error } = await supa.auth.signInWithPassword({ email: usernameToEmail(user.value), password: pass.value.trim() });
     btn.disabled = false; btn.textContent = 'Giriş yap';
     if (error) { err.textContent = /invalid/i.test(error.message) ? 'Kullanıcı adı ya da şifre yanlış.' : 'Giriş yapılamadı: ' + error.message; return; }
     start();

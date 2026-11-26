@@ -87,7 +87,7 @@ export function createMock() {
         for (const c of (b.coach_ids && b.coach_ids.length ? b.coach_ids : [me.id])) db.student_coaches.push({ student_id: id, coach_id: c });
         return json(route, 200, { ok: true, id, username });
       }
-      if (b.action === 'ogrenci_guncelle') { const st = db.profiles.find((x) => x.id === b.id); for (const k of ['display_name', 'group_name', 'lesson_type']) if (k in b) st[k] = b[k];
+      if (b.action === 'ogrenci_guncelle') { const st = db.profiles.find((x) => x.id === b.id); for (const k of ['display_name', 'group_name', 'lesson_type']) if (k in b) st[k] = b[k]; if (b.password) for (const u of users.values()) if (u.id === b.id) u.password = b.password;
         if (b.coach_ids) { db.student_coaches = db.student_coaches.filter((x) => x.student_id !== b.id); for (const c of b.coach_ids) db.student_coaches.push({ student_id: b.id, coach_id: c }); } return json(route, 200, { ok: true }); }
       if (b.action === 'ogrenci_sil') { db.profiles = db.profiles.filter((x) => x.id !== b.id); db.reports = db.reports.filter((x) => x.student_id !== b.id); return json(route, 200, { ok: true }); }
       return json(route, 400, { error: 'Bilinmeyen işlem' });
