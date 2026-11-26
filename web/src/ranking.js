@@ -1,14 +1,29 @@
 // "Sıralama": every puzzle type × this week / this month / all time × my group / whole academy.
 // Data: leaderboard2() (only students whose parents agreed; names shortened as "Ayşe Y.").
 import { supa } from './supa.js';
-import { h, clear } from '../../src/renderer/core/dom.js';
+import { h, clear, modal } from '../../src/renderer/core/dom.js';
+import { POINTS, DAY_MAX } from '../../src/renderer/core/points.js';
 
+// [kind, label, group]
 export const KINDS = [
-  ['antrenman', 'Antrenman'], ['storm3', 'Storm 3 dk'], ['storm5', 'Storm 5 dk'],
-  ['rush3', 'Rush 3 dk'], ['rush5', 'Rush 5 dk'], ['survival', 'Hayatta kal'], ['streak', 'Streak'],
+  ['toplam', 'Genel puan (bütün çalışmalar)', 'Genel'],
+  ['antrenman', 'Bulmaca antrenmanı', 'Bulmacalar'], ['storm3', 'Storm 3 dk', 'Bulmacalar'], ['storm5', 'Storm 5 dk', 'Bulmacalar'],
+  ['rush3', 'Rush 3 dk', 'Bulmacalar'], ['rush5', 'Rush 5 dk', 'Bulmacalar'], ['survival', 'Rush – Hayatta kal', 'Bulmacalar'], ['streak', 'Streak', 'Bulmacalar'],
+  ['endgames', 'Oyunsonu', 'Çalışmalar'], ['videos', 'Videolar', 'Çalışmalar'], ['gtmGames', 'Hamleyi Tahmin Et', 'Çalışmalar'],
+  ['openings', 'Açılış Tekrarı', 'Çalışmalar'], ['playGames', 'Pozisyondan Oyna', 'Çalışmalar'], ['lichessGames', "Lichess'te Oyna", 'Çalışmalar'],
 ];
+const COUNT_UNIT = { endgames: 'konum', videos: 'video', gtmGames: 'oyun', openings: 'pozisyon', playGames: 'oyun', lichessGames: 'oyun' };
 const PERIODS = [['week', 'Bu hafta'], ['month', 'Bu ay'], ['all', 'Tüm zamanlar']];
-const unit = (kind, period) => (kind === 'antrenman' ? (period === 'all' ? 'puan' : 'bulmaca') : kind === 'streak' ? 'seri' : 'bulmaca');
+const unit = (kind, period) => (kind === 'toplam' ? 'puan' : COUNT_UNIT[kind] || (kind === 'antrenman' ? (period === 'all' ? 'puan' : 'bulmaca') : kind === 'streak' ? 'seri' : 'bulmaca'));
+
+// "Puanlar nasıl hesaplanır?"
+export function pointsHelp() {
+  modal({ title: 'Genel puan nasıl hesaplanır?', body: h('div',
+    h('p.muted.small', 'Her çalışma puan kazandırır. Bir çalışmadan bir günde alınabilecek puanın sınırı var; puanı yükseltmenin yolu her gün farklı çalışmalar yapmak.'),
+    h('table.kv', POINTS.map(([, label, per, cap, u]) => h('tr', h('td', label), h('td', `${u} başına ${per} puan`), h('td.muted.small', `günde en çok ${per * cap} puan`)))),
+    h('p.muted.small', `Bir günde en çok ${DAY_MAX} puan alınabilir. Pozisyondan Oyna'da oyunun sayılması için en az 8 hamle oynanmalı (ya da mat olmalı); Lichess'te iptal edilen oyunlar sayılmaz.`)),
+    actions: [{ label: 'Tamam', primary: true }] });
+}
 const medal = (n) => (n === 1 ? '🥇' : n === 2 ? '🥈' : n === 3 ? '🥉' : n);
 
 export async function fetchRanking(kind, period, scope, grp = null) {
@@ -37,7 +52,7 @@ function table(rows, kind, period, { limit = 50, showGroup = false } = {}) {
 
 // Full view: used by the "Sıralama" module (students) and Antrenör → Sıralama (coaches).
 export function rankingView({ isCoach = false, myGroup = null, groups = [] } = {}) {
-  const st = { kind: 'antrenman', period: 'week', scope: isCoach ? 'academy' : (myGroup ? 'group' : 'academy'), grp: isCoach ? groups[0] || null : myGroup };
+  const st = { kind: 'toplam', period: 'week', scope: isCoach ? 'academy' : (myGroup ? 'group' : 'academy'), grp: isCoach ? groups[0] || null : myGroup };
   const pickGroup = isCoach || groups.length > 1;
   const root = h('div.ranking');
   const body = h('div.panel.lb-panel');
@@ -45,7 +60,11 @@ export function rankingView({ isCoach = false, myGroup = null, groups = [] } = {
   async function draw() {
     const scopeItems = isCoach ? [['academy', 'Akademi geneli'], ...(groups.length ? [['group', 'Grup']] : [])] : [...(myGroup ? [['group', groups.length > 1 ? 'Grubum' : `Grubum (${myGroup})`]] : []), ['academy', 'Akademi geneli']];
     clear(root).append(
-      h('div.lb-controls', seg(KINDS, 'kind'), seg(PERIODS, 'period'),
+      h('div.lb-controls',
+        h('div.btn-row', h('select.filter-sel.lb-kind', { onchange: (e) => { st.kind = e.target.value; draw(); } },
+          [...new Set(KINDS.map((k) => k[2]))].map((g) => h('optgroup', { label: g }, KINDS.filter((k) => k[2] === g).map(([k, l]) => h('option', { value: k, selected: st.kind === k }, l))))),
+          h('button.btn.small.ghost', { onclick: pointsHelp }, 'Puanlar nasıl hesaplanır?')),
+        seg(PERIODS, 'period'),
         h('div.btn-row', seg(scopeItems, 'scope'),
           pickGroup && st.scope === 'group' ? h('select.filter-sel', { onchange: (e) => { st.grp = e.target.value; draw(); } }, groups.map((g) => h('option', { value: g, selected: g === st.grp }, g))) : null)),
       body);
@@ -55,7 +74,9 @@ export function rankingView({ isCoach = false, myGroup = null, groups = [] } = {
       clear(body).append(...[
         h('div.panel-title', `${KINDS.find((k) => k[0] === st.kind)[1]} · ${PERIODS.find((p) => p[0] === st.period)[1]}`),
         table(rows, st.kind, st.period, { showGroup: st.scope === 'academy' }),
-        h('div.muted.small', st.kind === 'antrenman'
+        h('div.muted.small', st.kind === 'toplam' ? 'Bütün çalışmalardan toplanan puan (bulmaca, tekrar, açılış, oyunsonu, video, Tahmin Et, Pozisyondan Oyna, Lichess).'
+          : COUNT_UNIT[st.kind] ? (st.period === 'all' ? 'Bugüne kadar toplam.' : 'Bu dönemde toplam.')
+          : st.kind === 'antrenman'
           ? (st.period === 'all' ? 'Tüm zamanlar: bulmaca puanı (Antrenman sekmesindeki puan).' : 'Bu dönemde çözülen bulmaca sayısı (Antrenman + Tekrar).')
           : st.period === 'all' ? 'Bugüne kadarki en iyi skor (rekor).' : 'Bu dönemdeki en iyi skor. Hafta pazartesi, ay ayın 1\'inde yeniden başlar.'),
         isCoach ? h('div.muted.small', 'Yalnızca velisi onay veren öğrenciler sıralamada görünür (Hesaplar → "Sıralamada").') : null].filter(Boolean));
@@ -69,11 +90,11 @@ export function rankingView({ isCoach = false, myGroup = null, groups = [] } = {
 export function homeRanking({ myGroup, go }) {
   const host = h('div');
   const scope = myGroup ? 'group' : 'academy';
-  fetchRanking('antrenman', 'week', scope).then((rows) => {
+  fetchRanking('toplam', 'week', scope).then((rows) => {
     if (rows.length < 2) return;
     host.append(h('div.panel.lb-panel',
-      h('div.panel-title', `🏆 Bu hafta · ${myGroup ? myGroup : 'Akademi'}`, h('button.btn.small.ghost', { style: { marginLeft: 'auto' }, onclick: () => go('siralama') }, 'Bütün sıralamalar →')),
-      table(rows, 'antrenman', 'week', { limit: 5 })));
+      h('div.panel-title', `🏆 Bu haftanın puanları · ${myGroup ? myGroup : 'Akademi'}`, h('button.btn.small.ghost', { style: { marginLeft: 'auto' }, onclick: () => go('siralama') }, 'Bütün sıralamalar →')),
+      table(rows, 'toplam', 'week', { limit: 5 })));
   }).catch(() => {});
   return host;
 }

@@ -6,6 +6,7 @@
 // Both are gzip JSON files written by the main process (file:save / file:open).
 import { store } from './store.js';
 import { activity, goalProgress, streak, lastDays } from './activity.js';
+import { pointsSummary } from './points.js';
 import { pdata, themeAnalysis, pickFrom, dueReviews } from '../modules/puzzles/data.js';
 import { odata, repSummary, treeStats } from '../modules/openings/data.js';
 import { unpackTree } from './pgntree.js';
@@ -295,6 +296,7 @@ export async function buildReport() {
     gtm: { games: gtmGames.slice(0, 40), played: gtmGames.length },
     play: { ...res, total: playGames.length, recent: playGames.slice(-10).reverse().map((g) => ({ t: g.t, opp: g.opp, result: g.result, side: g.userColor, reason: g.reason, tc: g.tc || null })) },
     activity: { days: lastDays(activity.days, 70), streak: streak(activity.days, goal), goal },
+    points: pointsSummary(activity.days),
     assignments: asg,
     badges: await api.read('badges', {}),
     exams: await api.read('exams', {}),

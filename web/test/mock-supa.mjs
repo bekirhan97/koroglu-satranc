@@ -1,3 +1,4 @@
+import { dayPoints } from '../../src/renderer/core/points.js';
 // In-memory stand-in for the Supabase project, for UI tests with Playwright (page.route).
 // Covers what the web app uses: password login, /auth/v1/user, PostgREST select/insert/upsert/update/delete
 // with eq filters, and the "hesap" function. No RLS: tests only check the UI flows.
@@ -116,7 +117,8 @@ export function createMock() {
       const b = JSON.parse(req.postData() || '{}'); const uid = userFromReq(req); const me = prof(uid);
       const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === academyOf(me) && (x.leaderboard_ok || x.id === uid) && (b.scope !== 'group' || (() => { const g = me.role === 'coach' ? b.grp : (b.grp && myGroupsMock(me).includes(b.grp) ? b.grp : me.group_name); return x.group_name === g || groupsOfMock(x.id).includes(g); })()));
       const rows = team.map((t) => { let v = 0;
-        if (b.kind === 'antrenman') { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; v = r ? (b.period === 'all' ? r.ratings.puzzles.r : r.activity.days.slice(-7).reduce((a, d) => a + (d.puzzles || 0) + (d.reviews || 0), 0)) : 0; }
+        if (b.kind === 'toplam' || ['openings', 'endgames', 'videos', 'gtmGames', 'playGames', 'lichessGames'].includes(b.kind)) { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; const ds = r ? r.activity.days.slice(-7) : []; v = b.kind === 'toplam' ? ds.reduce((a, d) => a + dayPoints(d), 0) : ds.reduce((a, d) => a + (d[b.kind] || 0), 0); }
+        else if (b.kind === 'antrenman') { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; v = r ? (b.period === 'all' ? r.ratings.puzzles.r : r.activity.days.slice(-7).reduce((a, d) => a + (d.puzzles || 0) + (d.reviews || 0), 0)) : 0; }
         else v = Math.max(0, ...db.scores.filter((x) => x.student_id === t.id && x.kind === b.kind).map((x) => x.score));
         return { name: t.display_name.split(' ')[0] + ' ' + t.display_name.split(' ').pop()[0] + '.', is_me: t.id === uid, group_name: t.group_name, value: v }; }).filter((r) => r.value > 0 || r.is_me);
       return json(route, 200, rows);

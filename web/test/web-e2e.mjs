@@ -356,7 +356,12 @@ await shot(s, '13-rush-son');
 
 step('Sıralama (Rush 3 dk, akademi)');
 await nav(s, 'Sıralama'); await s.waitForTimeout(1500);
-await s.click('.lb-controls button:has-text("Rush 3 dk")'); await s.waitForTimeout(400);
+console.log('  genel puan (varsayılan):', await s.locator('.lb-kind').inputValue(), '·', (await s.locator('.lb-panel').textContent()).replace(/\s+/g, ' ').slice(0, 120));
+await shot(s, '13a-genel-puan');
+await s.click('button:has-text("Puanlar nasıl hesaplanır?")'); await s.waitForTimeout(400);
+console.log('  puan tablosu satırı:', await s.locator('.modal table tr').count()); await shot(s, '13a2-puan-tablosu');
+await s.click('.modal button:has-text("Tamam")'); await s.waitForTimeout(300);
+await s.selectOption('.lb-kind', 'rush3'); await s.waitForTimeout(400);
 await s.click('.lb-controls button:has-text("Akademi geneli")'); await s.waitForTimeout(1200);
 console.log('  skor kaydı:', MOCK.db.scores.length, '· sıralama satırı:', await s.locator('table.lb tr').count());
 await shot(s, '13b-siralama');

@@ -24,7 +24,8 @@ test('Öğrenci ve grup toplamları', () => {
   const s = summarize([a, b]);
   assert.equal(s.total.puzzles, 10); assert.equal(s.avg.puzzles, 5); assert.equal(s.total.lessons, 1);
   assert.equal(groupRows([a, b])[0].sum.n, 2);
-  assert.match(toCsv([a, b], 'Son 3 gün'), /"Ali";"Cmt 10";"10"/);
+  assert.equal(a.points, 50);
+  assert.match(toCsv([a, b], "Son 3 gün"), /"Ali";"Cmt 10";"50";"10"/);
 });
 
 test('Birden çok grup ve özel ders alan öğrenci her grupta sayılır', () => {

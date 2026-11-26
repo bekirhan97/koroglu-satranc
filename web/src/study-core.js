@@ -1,5 +1,6 @@
 // "Çalışma raporu": how much of each kind of work students did in a period, per student and per group.
 // Pure functions (no browser APIs) so they can be unit-tested.
+import { dayPoints } from '../../src/renderer/core/points.js';
 export const DAY = 86400e3;
 export const keyOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -24,6 +25,7 @@ export const rangeMs = (r) => ({ since: ms(r.from), until: ms(r.to, true) });
 
 // Columns: [key, short label, long label]
 export const COLS = [
+  ['points', 'Puan', 'Çalışma puanı (sıralamadaki genel puan)'],
   ['puzzles', 'Bulmaca', 'Çözülen bulmaca (antrenman, ödev setleri, Storm/Rush/Streak, oyunlarımdan)'],
   ['reviews', 'Tekrar', 'Bulmaca tekrarı'],
   ['speed', 'Hız oyunu', 'Storm / Rush / Streak oyunu sayısı'],
@@ -45,9 +47,11 @@ export function studentRow(st, rep, { from, to, scores = [], attendance = [], li
   const row = { id: st.id, name: st.display_name, groups, ozel, group: [...groups, ...(ozel ? ['Özel ders'] : [])].join(' · '), lesson_type: st.lesson_type, hasReport: !!rep };
   for (const k of ACT) row[k] = 0;
   row.days = 0;
+  row.points = 0;
   const days = (rep && rep.activity && rep.activity.days) || [];
   for (const d of days) {
     if (d.key < from || d.key > to) continue;
+    row.points += dayPoints(d);
     let any = false;
     for (const k of ACT) if (d[k]) { row[k] += d[k]; any = true; }
     if (any || d.gtmMoves) row.days++;

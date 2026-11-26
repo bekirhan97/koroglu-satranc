@@ -21,7 +21,7 @@ export const activity = {
   loaded: false,
   async load() { const a = await api.read('activity', {}); this.days = a.days || {}; this.loaded = true; return this; },
   save() { return api.write('activity', { days: this.days }); },
-  // kind: puzzles | reviews | openings | gtmMoves | gtmGames | playGames
+  // kind: puzzles | reviews | openings | gtmMoves | gtmGames | playGames | endgames | videos | lichessGames
   add(kind, n = 1, t = Date.now()) {
     const k = dayKey(t);
     const d = (this.days[k] = this.days[k] || {});

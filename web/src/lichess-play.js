@@ -7,6 +7,7 @@ import { supa } from './supa.js';
 import { LICHESS, playToken, startLink, getLink, forgetPlay } from './lichess.js';
 import { h, clear, modal, toast } from '../../src/renderer/core/dom.js';
 import { Board } from '../../src/renderer/core/board.js';
+import { activity } from '../../src/renderer/core/activity.js';
 
 const SEEKS = [[10, 0, '10+0'], [10, 5, '10+5'], [15, 10, '15+10'], [30, 0, '30+0']]; // rapid/classical: allowed for seeks
 const CHALLENGE_TCS = [[3, 2, '3+2'], [5, 3, '5+3'], [10, 0, '10+0'], [10, 5, '10+5'], [15, 10, '15+10']];
@@ -96,6 +97,16 @@ const fmtClock = (ms) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
+// A finished Lichess game counts once for the study points (not aborted / unstarted ones).
+function countGame(id, status, plies) {
+  if (['aborted', 'noStart'].includes(status) || plies < 2) return;
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem('koroglu-lichess-sayilan') || '[]'); } catch (e) { seen = []; }
+  if (seen.includes(id)) return;
+  seen = [...seen, id].slice(-100);
+  try { localStorage.setItem('koroglu-lichess-sayilan', JSON.stringify(seen)); } catch (e) { /* ignore */ }
+  activity.add('lichessGames');
+}
 const STATUS = { mate: 'Mat', resign: 'Teslim', stalemate: 'Pat', timeout: 'Süre bitti', draw: 'Berabere', outoftime: 'Süre bitti', cheat: 'Hile tespiti', noStart: 'Oyun başlamadı', aborted: 'İptal edildi', variantEnd: 'Bitti' };
 
 // ---------- module ----------
@@ -255,6 +266,7 @@ export default {
         moveList.scrollTop = moveList.scrollHeight;
         if (over) {
           live.game = null;
+          countGame(id, st.status, mv.length);
           const won = st.winner ? st.winner === myColor : null;
           status.className = 'lp-status ' + (won === true ? 'win' : won === false ? 'loss' : '');
           status.textContent = `${won === true ? 'Kazandın! 🎉' : won === false ? 'Kaybettin' : 'Oyun bitti'} · ${STATUS[st.status] || st.status}`;

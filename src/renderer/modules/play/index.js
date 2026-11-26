@@ -423,7 +423,8 @@ class GameView {
     if (this.clockRunning()) { const c = this.toMove(); this.g.clock[c] = Math.max(0, this.remaining(c)); }
     if (this.tick) { clearInterval(this.tick); this.tick = null; }
     this.g.status = 'done'; this.g.result = result; this.g.reason = reason;
-    activity.add('playGames');
+    // only real games count (no instant resign / abort farming): 8+ moves each, or a mate
+    if (this.g.moves.length >= 16 || /^mat/i.test(reason || '')) activity.add('playGames');
     pdataSave();
     this.thinking = false;
     this.view = null;
