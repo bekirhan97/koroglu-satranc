@@ -538,6 +538,7 @@ const addClass = async (name, kind, slots) => {
 await addClass('Salı-Perşembe 18:00', 'grup', [[2, '18:00'], [4, '18:00']]);
 await addClass('Özel – Şükrü', 'ozel', [[3, '17:00'], [5, '17:00']]);
 const sk = MOCK.db.profiles.find((x) => x.username === studentUser);
+console.log('  ders hocası öğrencinin hocası oldu:', MOCK.db.student_coaches.filter((x) => x.student_id === MOCK.db.profiles.find((p) => p.username === studentUser).id).length);
 console.log('  yeni ders saatleri:', JSON.stringify(MOCK.db.classes.find((x) => x.name === 'Salı-Perşembe 18:00').slots), '· Şükrü ana grubu:', sk.group_name);
 await c.click('button:has-text("Gruplar ve özel dersler")'); await c.waitForTimeout(600);
 console.log('  ders listesi:', (await c.locator('.modal .class-row').allTextContents()).map((t) => t.replace(/\s+/g, ' ').replace('Düzenle', '')).join(' | '));

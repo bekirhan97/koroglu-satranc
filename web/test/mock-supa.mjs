@@ -107,6 +107,9 @@ export function createMock() {
         const gs = groupsOfMock(pr.id).sort();
         pr.group_name = gs.includes(pr.group_name) ? pr.group_name : gs[0] || (pr.group_name === b.old_name ? null : pr.group_name);
       }
+      // lesson coaches become coaches of the lesson's students (only added)
+      const cl = b.cid && db.classes.find((x) => x.id === b.cid);
+      if (cl) for (const sid of ids) for (const co of cl.coach_ids || []) if (!db.student_coaches.some((x) => x.student_id === sid && x.coach_id === co)) db.student_coaches.push({ student_id: sid, coach_id: co });
       return json(route, 204);
     }
     if (p === '/rest/v1/rpc/leaderboard2') {
