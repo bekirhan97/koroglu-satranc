@@ -584,6 +584,37 @@ console.log('  hocalar:', (await c.locator('.lb-panel').first().textContent()).r
 const coachId = MOCK.db.profiles.find((p) => p.username === 'test.antrenor').id;
 console.log('  hoca raporu gönderildi:', MOCK.db.reports.some((r) => r.student_id === coachId), '· öğrenci listesinde hoca yok:', !(await c.evaluate(async (id) => { const r = await window.api.read('teacher/students', {}); return Object.values(r || {}).some((x) => x.id === id || x.name === 'Test Antrenör'); }, coachId)));
 await shot(c, '46-hoca-siralamasi');
+step('turnuva maçları: öğrenci maç girer, analiz, hoca PGN aktarır + yorum, rakip veritabanı');
+{
+  const q = await newPage(); await q.goto(URL); await q.waitForTimeout(1200);
+  await q.fill('input[placeholder="Kullanıcı adı"]', studentUser); await q.fill('input[placeholder="Şifre"]', studentPass); await q.click('button:has-text("Giriş yap")'); await q.waitForTimeout(3000);
+  await nav(q, 'Turnuva Maçları'); await q.waitForTimeout(1500);
+  await q.click('button:has-text("+ Maç ekle")'); await q.waitForTimeout(500);
+  await q.click('.modal .seg button:has-text("Siyah")');
+  await q.fill('.modal input[placeholder="Rakibin adı soyadı"]', 'Ali Demir'); await q.fill('.modal input[placeholder="Örn. 1450"]', '1450');
+  await q.fill('.modal input[placeholder^="Örn. İzmir"]', 'İzmir Küçükler 2026'); await q.fill('.modal input[placeholder="Örn. 3"]', '1');
+  await q.fill('.modal textarea', '1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bc4 e6 7.Bb3 b5 8.Qf3 Bb7 9.Qg3 Nxe4 10.Nxe4 Bxe4 11.Qxg7 Qh4');
+  await q.click('.modal button:has-text("Maçı kaydet")'); await q.waitForTimeout(2500);
+  console.log('  kaydedilen:', MOCK.db.tournament_games.length, MOCK.db.tournament_games[0] && MOCK.db.tournament_games[0].opening, '· rakip:', MOCK.db.opponents.map((o) => o.name).join(','));
+  await q.click('button:has-text("Stockfish ile analiz et")');
+  await q.waitForSelector('.tg-acc >> text=İsabet', { timeout: 120000 });
+  console.log('  analiz:', (await q.locator('.tg-info').textContent()).replace(/\s+/g, ' '), '· işaretli hamle:', await q.locator('.tg-mv.blunder, .tg-mv.mistake').count());
+  await shot(q, '47-turnuva-mac');
+  await q.context().close();
+  const pgn = `[Event "İzmir Küçükler 2026"]\n[Round "2"]\n[Date "2026.11.22"]\n[White "Sukru, Test Ogrenci"]\n[Black "Demir, Ali"]\n[BlackElo "1455"]\n[Result "1/2-1/2"]\n\n1. e4 e5 2. Nf3 Nc6 1/2-1/2\n\n[Event "x"]\n[White "Baska, Biri"]\n[Black "Kimse, Yok"]\n[Result "1-0"]\n\n1. d4 1-0\n`;
+  await nav(c, 'Turnuva Maçları'); await c.waitForTimeout(1500);
+  await c.click('button:has-text("PGN dosyası")'); await c.waitForTimeout(400);
+  await c.fill('.modal textarea', pgn); await c.click('.modal button:has-text("Maçları bul")'); await c.waitForTimeout(500);
+  console.log('  PGN önizleme:', (await c.locator('.modal').textContent()).match(/\d+ maç bulundu[^.]*/)[0]);
+  await c.click('.modal button:has-text("Seçilenleri ekle")'); await c.waitForTimeout(2500);
+  console.log('  toplam maç:', MOCK.db.tournament_games.length, '· rakip sayısı:', MOCK.db.opponents.length);
+  await c.locator('.tg-row').first().click(); await c.waitForTimeout(1500);
+  await c.locator('.tg-mv').nth(2).click(); await c.fill('.tg-com-edit textarea', 'Burada önce gelişim!'); await c.click('button:has-text("Yorumu kaydet")'); await c.waitForTimeout(800);
+  console.log('  hoca yorumu:', MOCK.db.game_comments.map((x) => x.ply + ':' + x.body).join(' | '));
+  await c.click('button:has-text("Rakip:")'); await c.waitForTimeout(1200);
+  console.log('  rakip sayfası:', (await c.locator('.tg-opp').textContent()).replace(/\s+/g, ' ').slice(0, 220));
+  await shot(c, '48-rakip');
+}
 step('bildirim tetikleri');
 const kinds = MOCK.pushes.filter((b) => b.action === 'gonder').map((b) => b.title + ' → ' + b.ids.length);
 console.log('  gönderilen bildirimler:', kinds.join(' | '));

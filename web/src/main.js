@@ -19,6 +19,7 @@ import openings from '../../src/renderer/modules/openings/index.js';
 import play from '../../src/renderer/modules/play/index.js';
 import videos from './videos.js';
 import ranking, { homeRanking } from './ranking.js';
+import tournament from './tournament.js';
 import schedule, { homeNextLesson, homeLessonReport } from './schedule.js';
 import lichessPlay, { live } from './lichess-play.js';
 import { loadOpenings } from '../../src/renderer/core/openings.js';
@@ -42,7 +43,7 @@ let mounted = null;
 let activeId = 'home';
 teacher.title = 'Antrenör';
 lichessPlay.short = 'Lichess'; gtm.short = 'Tahmin Et'; openings.short = 'Açılış'; play.short = 'Oyna'; puzzles.short = 'Bulmaca';
-const MODULES = [schedule, videos, puzzles, endgame, gtm, openings, play, lichessPlay, ranking, teacher];
+const MODULES = [schedule, videos, puzzles, endgame, gtm, openings, play, lichessPlay, tournament, ranking, teacher];
 const visibleModules = () => MODULES.filter((m) => !m.teacherOnly || (me && me.role === 'coach'));
 
 // ---------- login ----------

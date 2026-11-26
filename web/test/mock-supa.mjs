@@ -5,14 +5,14 @@ import { dayPoints } from '../../src/renderer/core/points.js';
 import crypto from 'node:crypto';
 
 export function createMock() {
-  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [], student_coaches: [], classes: [], class_members: [], sessions: [], attendance: [], scores: [], client_errors: [], session_notes: [], session_reads: [], endgame_positions: [] };
+  const db = { profiles: [], kv: [], assignments: [], assignment_targets: [], reports: [], videos: [], lichess_accounts: [], announcements: [], student_coaches: [], classes: [], class_members: [], sessions: [], attendance: [], scores: [], client_errors: [], session_notes: [], session_reads: [], endgame_positions: [], opponents: [], tournament_games: [], game_comments: [] };
   const users = new Map(); // email -> { id, password }
   const pushes = []; // calls to the bildirim function
   const tokens = new Map(); // token -> user id
   const DOMAIN = 'kullanici.koroglu-satranc.app';
   const groupsOfMock = (sid) => db.class_members.filter((m) => m.student_id === sid).map((m) => db.classes.find((c) => c.id === m.class_id)).filter((c) => c && c.kind === 'grup').map((c) => c.name);
   const myGroupsMock = (p) => [...new Set([...(p.group_name ? [p.group_name] : []), ...groupsOfMock(p.id)])];
-  const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'], classes: ['id'], class_members: ['class_id', 'student_id'], sessions: ['id'], attendance: ['session_id', 'student_id'], scores: ['id'], client_errors: ['id'], session_notes: ['session_id', 'student_id'], session_reads: ['session_id', 'student_id'], endgame_positions: ['id'] };
+  const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'], classes: ['id'], class_members: ['class_id', 'student_id'], sessions: ['id'], attendance: ['session_id', 'student_id'], scores: ['id'], client_errors: ['id'], session_notes: ['session_id', 'student_id'], session_reads: ['session_id', 'student_id'], endgame_positions: ['id'], opponents: ['id'], tournament_games: ['id'], game_comments: ['game_id', 'ply'] };
 
   const prof = (id) => db.profiles.find((x) => x.id === id);
   const academyOf = (p) => (p ? (p.role === 'coach' && !p.coach_id ? p.id : p.coach_id) : null);
@@ -172,6 +172,7 @@ export function createMock() {
         if (table === 'announcements') { row.id = crypto.randomUUID(); row.coach_id = uid; row.created_at = new Date().toISOString(); }
         if (table === 'videos') { row.id = row.id || crypto.randomUUID(); row.coach_id = row.coach_id || uid; row.created_at = new Date().toISOString(); }
         if (table === 'assignments') row.created_at = new Date().toISOString();
+        if (['opponents', 'tournament_games', 'game_comments'].includes(table)) { row.id = row.id || crypto.randomUUID(); row.created_at = row.created_at || new Date().toISOString(); }
         const keys = url.searchParams.get('on_conflict') ? url.searchParams.get('on_conflict').split(',') : keyOf[table];
         const i = db[table].findIndex((r) => keys.every((k) => r[k] === row[k]));
         if (i >= 0) { if (prefer.includes('merge-duplicates')) { const keepId = db[table][i].id; db[table][i] = { ...db[table][i], ...row }; if (keepId) db[table][i].id = keepId; out.push(db[table][i]); continue; } else return json(route, 409, { code: '23505', message: 'duplicate key' }); }
