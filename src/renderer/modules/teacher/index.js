@@ -1,4 +1,4 @@
-import { CHAPTERS as EG_CHAPTERS, LESSONS as EG_LESSONS, GOAL_TEXT as EG_GOAL } from '../endgame/curriculum.js';
+import { loadCurriculum as loadEg, curriculum as egCur, GOAL_TEXT as EG_GOAL } from '../endgame/curriculum.js';
 // "Öğretmen" (teacher mode only): students' progress reports and preparing assignment packages.
 import { h, clear, modal, toast, fmtDate } from '../../core/dom.js';
 import { store } from '../../core/store.js';
@@ -133,13 +133,17 @@ export default {
             h('span', { style: { height: `${dayTotal(d) ? 8 + (92 * dayTotal(d)) / maxDay : 0}%` } }), h('i', d.key.slice(8))))),
           goal ? h('div.muted.small', 'Günlük hedef: ' + GOAL_KINDS.filter(([k]) => goal[k] > 0).map(([k, unit]) => `${goal[k]} ${unit}`).join(', ') + (goal.from === 'self' ? ' (öğrencinin kendi hedefi)' : '')) : null),
         r.lichess && r.lichess.username ? lichessPanel(r.lichess) : null,
-        r.endgame && Object.keys(r.endgame).length ? h('div.panel', h('div.panel-title', `Oyunsonu (${EG_LESSONS.filter((l) => r.endgame[l.id]).length}/${EG_LESSONS.length} ders)`),
-          h('div.eg-report', EG_CHAPTERS.map(([ch, name]) => {
-            const ls = EG_LESSONS.filter((l) => l.ch === ch);
-            const d = ls.filter((l) => r.endgame[l.id]);
-            return h('div', h('b', name), h('span.muted.small', ` ${d.length}/${ls.length} · ${d.reduce((x, l) => x + (r.endgame[l.id].stars || 0), 0)} ★`),
-              d.length ? h('div.muted.small', d.map((l) => `${l.title} ${'★'.repeat(r.endgame[l.id].stars || 0)}`).join(', ')) : null);
-          }))) : null,
+        r.endgame && Object.keys(r.endgame).length ? (() => {
+          const cur = egCur() || { lessons: [], chapters: [] };
+          const ids = Object.keys(r.endgame);
+          const starsAll = ids.reduce((x, id) => x + (r.endgame[id].stars || 0), 0);
+          return h('div.panel', h('div.panel-title', `Oyunsonu: ${ids.length} konum · ★ ${starsAll}`),
+            h('div.eg-report', cur.chapters.map((c) => {
+              const ls = cur.lessons.filter((l) => l.ch === c.id);
+              const d = ls.filter((l) => r.endgame[l.id]);
+              return d.length ? h('div', h('b', c.name), h('span.muted.small', ` ${d.length}/${ls.length} · ${d.reduce((x, l) => x + (r.endgame[l.id].stars || 0), 0)} ★`)) : null;
+            })));
+        })() : null,
         r.badges && Object.keys(r.badges).length ? h('div.panel', h('div.panel-title', `Rozetler (${Object.keys(r.badges).length}/${BADGES.length})`),
           h('div.badge-row', BADGES.filter((b) => r.badges[b.id]).map((b) => h('span.badge-chip', { title: `${b.desc} · ${fmtDate(r.badges[b.id])}` }, b.icon, ' ', b.name)))) : null,
         r.exams && Object.values(r.exams).some((e) => e.finishedAt) ? h('div.panel', h('div.panel-title', 'Sınavlar'),
@@ -289,14 +293,19 @@ export default {
       }).catch(() => {});
 
       // endgame lessons (web only): ready-made curriculum + the academy's own positions
-      let egCustom = [];
+      let egCustom = [], egLessons = [], egChapters = [];
       const egPanel = h('div.panel', h('div.panel-title', 'Oyunsonu'));
       const drawEg = () => clear(egPanel).append(h('div.panel-title', 'Oyunsonu'),
-        h('p.muted.small', 'Öğrenci her dersi kusursuz savunan bilgisayara karşı oynar; hedefe ulaşınca geçer (1–3 yıldız).'),
-        ...EG_CHAPTERS.map(([ch, name]) => h('details.eg-pick', h('summary', name, h('span.muted.small', ` (${EG_LESSONS.filter((l) => l.ch === ch && f.endgames.has(l.id)).length}/${EG_LESSONS.filter((l) => l.ch === ch).length})`)),
-          h('div.pick-list', EG_LESSONS.filter((l) => l.ch === ch).map((l) => check(f.endgames, l.id, l.title, EG_GOAL[l.goal].split(' (')[0]))))),
-        egCustom.length ? h('details.eg-pick', h('summary', 'Hocaların konumları'), h('div.pick-list', egCustom.map((l) => check(f.endgames, l.id, l.title, EG_GOAL[l.goal].split(' (')[0])))) : null);
+        h('p.muted.small', 'Öğrenci her konumu bilgisayara karşı oynar (teorik konumlarda kusursuz savunma); hedefe ulaşınca geçer (1–3 yıldız).'),
+        ...egChapters.map((c) => {
+          const ls = egLessons.filter((l) => l.ch === c.id);
+          const topics = [...new Set(ls.map((l) => l.topic))];
+          return h('details.eg-pick', h('summary', c.name, h('span.muted.small', ` (${ls.filter((l) => f.endgames.has(l.id)).length}/${ls.length})`)),
+            topics.map((t) => h('div', h('div.muted.small', t), h('div.pick-list', ls.filter((l) => l.topic === t).map((l) => check(f.endgames, l.id, l.title, EG_GOAL[l.goal]))))));
+        }),
+        egCustom.length ? h('details.eg-pick', h('summary', 'Hocaların konumları'), h('div.pick-list', egCustom.map((l) => check(f.endgames, l.id, l.title, EG_GOAL[l.goal])))) : null);
       drawEg();
+      if (window.webHooks) loadEg().then((c) => { egLessons = c.lessons; egChapters = c.chapters; drawEg(); }).catch(() => {});
       if (window.endgameHooks) window.endgameHooks.list().then((rows) => { egCustom = rows.map((x) => ({ id: 'c-' + x.id, title: x.title, fen: x.fen, goal: x.goal, text: x.note || '' })); drawEg(); }).catch(() => {});
 
       const num = (k) => h('input.goal-in', { type: 'number', min: 0, max: 200, value: f.goal[k], onchange: (e) => { f.goal[k] = Math.max(0, +e.target.value || 0); } });
@@ -309,7 +318,7 @@ export default {
         const due = f.due ? new Date(f.due + 'T23:59:59').getTime() : null;
         const goal = Object.values(f.goal).some((v) => v > 0) ? { ...f.goal } : null;
         toast('Paket hazırlanıyor…');
-        const pkg = await buildPackage({ title, note: f.note.trim(), due, goal, gtmGameIds: [...f.games], setIds: [...f.sets], themeSets: f.themeSets, repIds: [...f.reps], links: f.links, videos: videoList.filter((v) => f.videos.has(v.id)).map((v) => ({ id: v.id, title: v.title, youtubeId: v.youtube_id })), endgames: [...EG_LESSONS, ...egCustom].filter((l) => f.endgames.has(l.id)), exam: f.exam.on ? {
+        const pkg = await buildPackage({ title, note: f.note.trim(), due, goal, gtmGameIds: [...f.games], setIds: [...f.sets], themeSets: f.themeSets, repIds: [...f.reps], links: f.links, videos: videoList.filter((v) => f.videos.has(v.id)).map((v) => ({ id: v.id, title: v.title, youtubeId: v.youtube_id })), endgames: [...egLessons, ...egCustom].filter((l) => f.endgames.has(l.id)), exam: f.exam.on ? {
           title: f.exam.title.trim() || `${title} sınavı`, minutes: f.exam.minutes,
           puzzles: f.exam.pz.mode === 'set' ? (f.exam.pz.setId ? { setId: f.exam.pz.setId, count: f.exam.pz.count } : null) : (f.exam.pz.count > 0 ? { theme: f.exam.pz.theme, count: f.exam.pz.count, min: f.exam.pz.min, max: f.exam.pz.max } : null),
           gtmGameId: f.exam.gtmGameId, repId: f.exam.repId, openingCount: f.exam.openingCount } : null });
@@ -365,6 +374,7 @@ export default {
       refresh();
     }
 
+    if (window.webHooks) loadEg().catch(() => {});
     if (window.__lessonCtx) { showPackage(); lessonBanner(); } else showStudents();
 
     // Assignment started from a lesson card in Program: show which lesson it will be linked to.

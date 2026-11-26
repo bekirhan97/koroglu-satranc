@@ -41,14 +41,15 @@ export async function probe(fen, { fetchFn = (u) => fetch(u), engine = null } = 
 }
 
 async function engineProbe(fen, engine) {
-  const r = await engine({ fen, depth: 18, movetime: 1500 }, 2);
+  const r = await engine({ fen, depth: 16, movetime: 1200 }, 2);
   if (!r || r.error || !r.lines || !r.lines.length) return null;
   const l = r.lines[0];
   const result = l.mate != null ? (l.mate > 0 ? 'win' : 'loss') : l.cp >= 300 ? 'win' : l.cp <= -300 ? 'loss' : 'draw';
   const c = new Chess(fen);
   let san = l.uci;
   try { san = c.move({ from: l.uci.slice(0, 2), to: l.uci.slice(2, 4), promotion: l.uci[4] || 'q' }).san; } catch (e) { /* keep uci */ }
-  return { result, source: 'engine', dtm: l.mate != null ? Math.abs(l.mate) : null, best: [{ uci: l.uci, san, result }] };
+  const cp = l.mate != null ? (l.mate > 0 ? 10000 - l.mate : -10000 - l.mate) : l.cp;
+  return { result, source: 'engine', cp, dtm: l.mate != null ? Math.abs(l.mate) : null, best: [{ uci: l.uci, san, result }] };
 }
 
 // Game-over state of a position (from chess.js).
@@ -67,4 +68,6 @@ export function stars({ mistakes, hints, moves, par }) {
   return 1;
 }
 
-export const HOLD_MOVES = 12; // a 'draw' lesson is passed after holding this many moves
+export const HOLD_MOVES = 12;
+export const PRACTICAL_HOLD = 15; // practical draw lessons
+export const PRACTICAL_WIN_CP = 800; // a practical win counts as done once this decisive // a 'draw' lesson is passed after holding this many moves

@@ -1,21 +1,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { Chess } from 'chess.js';
-import { LESSONS, CHAPTERS } from '../src/renderer/modules/endgame/curriculum.js';
+import { loadCurriculum, lessonById, LEVELS } from '../src/renderer/modules/endgame/curriculum.js';
 import { norm, flip, probe, stars, pieceCount } from '../src/renderer/modules/endgame/judge.js';
 
-test('Oyunsonu müfredatı: geçerli konumlar, en çok 7 taş, tekil kimlikler', () => {
+test('Oyunsonu müfredatı (kitap konumları): geçerli, tekil, teorik + pratik', async () => {
+  const raw = fs.readFileSync(new URL('../resources/endgames.json', import.meta.url), 'utf8');
+  const cur = await loadCurriculum(async () => ({ ok: true, json: async () => JSON.parse(raw) }));
   const ids = new Set();
-  for (const l of LESSONS) {
+  for (const l of cur.lessons) {
     assert.ok(!ids.has(l.id), 'tekrar: ' + l.id); ids.add(l.id);
-    assert.ok(CHAPTERS.some(([c]) => c === l.ch), l.id);
+    const ch = cur.chapters.find((c) => c.id === l.ch); assert.ok(ch, l.id);
     assert.ok(['mate', 'win', 'draw'].includes(l.goal), l.id);
-    const c = new Chess(l.fen); // throws if invalid
+    assert.ok(LEVELS.some(([n]) => n === l.level), l.id + ' seviye');
+    const c = new Chess(l.fen);
     assert.ok(!c.isGameOver(), l.id + ' oyun bitmiş');
-    assert.ok(pieceCount(l.fen) <= 7, l.id + ' 7 taştan fazla');
+    if (ch.kind === 'teori') assert.ok(pieceCount(l.fen) <= 7, l.id + ' teori 7 taştan fazla');
     assert.ok(l.text && l.text.length > 20, l.id + ' açıklama');
   }
-  assert.ok(LESSONS.length >= 45);
+  assert.ok(cur.lessons.length >= 200, 'ders sayısı ' + cur.lessons.length);
+  assert.ok(cur.chapters.some((c) => c.kind === 'pratik') && cur.chapters.some((c) => c.kind === 'teori'));
+  assert.equal(lessonById(cur.lessons[0].id), cur.lessons[0]);
 });
 
 test('Tablebase yorumu ve yıldızlar', async () => {
