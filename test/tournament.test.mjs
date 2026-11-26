@@ -71,3 +71,14 @@ test('Rakip istatistiği: renk renk açılışlar ve ilk hamleler', () => {
   assert.equal(s.w.first[0].move, '1.e4');
   assert.equal(s.b.first[0].move, '1.d4 d5');
 });
+
+test('Hazırlık çizgileri: ilk hatamızdan önce kesilir, yerine motorun hamlesi', async () => {
+  const { prepLines, pgnLine } = await import('../web/src/tournament-core.js');
+  // we are black; at ply 3 (our 2nd move) we blunder; engine preferred Nc6 (b8c6)
+  const g = { color: 'b', moves: 'e4 e5 Nf3 f6 Nxe5 fxe5', analysis: { evals: [20, 30, 30, 30, 500, 500, 500], best: [null, null, null, 'b8c6', null, null] } };
+  const ls = prepLines([g], 'w');
+  assert.equal(ls.length, 1);
+  assert.deepEqual(ls[0].sans, ['e4', 'e5', 'Nf3', 'Nc6']); assert.equal(ls[0].fixed, true);
+  assert.equal(pgnLine(ls[0].sans), '1.e4 e5 2.Nf3 Nc6');
+  assert.equal(prepLines([g], 'b').length, 0); // opponent never had black against us
+});

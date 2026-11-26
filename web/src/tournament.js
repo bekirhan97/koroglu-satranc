@@ -6,7 +6,10 @@ import { h, clear, modal, toast } from '../../src/renderer/core/dom.js';
 import { Board, localSan } from '../../src/renderer/core/board.js';
 import { loadOpenings, openingName } from '../../src/renderer/core/openings.js';
 import { academyStudents, meta } from './coach.js';
-import { normName, displayName, parseTournamentPgn, playMoves, myScore, scoreText, classify, opponentStats, winPct, KIND_MARK, KIND_TR } from './tournament-core.js';
+import { mine } from '../../src/renderer/modules/puzzles/mygames.js';
+import { odata } from '../../src/renderer/modules/openings/data.js';
+import { parsePgnTree } from '../../src/renderer/core/pgntree.js';
+import { prepLines, pgnLine, normName, displayName, parseTournamentPgn, playMoves, myScore, scoreText, classify, opponentStats, winPct, KIND_MARK, KIND_TR } from './tournament-core.js';
 
 const api = window.api;
 const RESULTS = [['1', 'Kazandı'], ['0.5', 'Berabere'], ['0', 'Kaybetti'], ['', 'Sonuç yok']];
@@ -100,6 +103,37 @@ async function analyseGame(game, onProgress) {
     onProgress && onProgress(i + 1, p.fens.length);
   }
   return { evals, best, depth: 13, at: new Date().toISOString() };
+}
+
+// ---------- my mistakes → personal puzzles (Bulmacalar → Oyunlarım) ----------
+// Only the student's own device can write them (their own data). Returns how many are in the puzzle list.
+export async function mistakesToPuzzles(g, opponentName) {
+  if (!g.analysis || !g.analysis.evals) return 0;
+  const p = playMoves(g.start_fen, g.moves);
+  const startColor = p.fens[0].split(' ')[1];
+  const cls = classify(g.analysis.evals, startColor);
+  const d = await mine.load();
+  d.games = d.games || {}; d.puzzles = d.puzzles || {};
+  let n = 0;
+  cls.moves.forEach((m, i) => {
+    if (!m || m.side !== g.color || !(m.kind === 'blunder' || m.kind === 'mistake') || i < 6) return;
+    const best = g.analysis.best[i];
+    if (!best || best === p.ucis[i]) return;
+    const ev = g.analysis.evals[i];
+    const stmCp = startColor === 'w' ? (i % 2 === 0 ? ev : -ev) : (i % 2 === 0 ? -ev : ev);
+    if (winPct(stmCp) < 35) return; // already lost: not a useful puzzle
+    const id = `tg-${g.id}-${i}`;
+    if (!d.puzzles[id]) {
+      d.puzzles[id] = { id, gameId: 'tg-' + g.id, ply: i, fen: p.fens[i], played: p.ucis[i], lastMove: p.ucis[i - 1], best, pv: [best], bestCp: stmCp,
+        loss: Math.round(m.drop), kind: m.kind === 'blunder' ? 'Büyük hata' : 'Hata', color: g.color, opponent: `${opponentName} (turnuva)`,
+        date: g.played_on ? Date.parse(g.played_on + 'T12:00:00') : Date.now(), status: null };
+    }
+    n++;
+  });
+  d.games['tg-' + g.id] = { id: 'tg-' + g.id, white: g.color === 'w' ? 'Ben' : opponentName, black: g.color === 'b' ? 'Ben' : opponentName, color: g.color,
+    createdAt: g.played_on ? Date.parse(g.played_on) : Date.now(), result: g.result, speed: 'turnuva', mistakes: n };
+  await mine.save();
+  return n;
 }
 
 // ---------- views ----------
@@ -393,7 +427,13 @@ export default {
           clear(anaBox).append(btn, h('div.muted.small', 'Her hamle motorla değerlendirilir; büyük hatalar (??), hatalar (?) ve belirsiz hamleler (?!) işaretlenir. Telefonda 1–2 dakika sürebilir.'));
         } else {
           const crit = cls.moves.map((m, i) => ({ m, i })).filter(({ m }) => m && (m.kind === 'blunder' || m.kind === 'mistake') && m.side === g.color);
-          clear(anaBox).append(crit.length ? h('div.tg-crit', h('div.small', h('b', g.student_id === me.id ? 'Kritik anlar (senin hataların): ' : 'Kritik anlar (öğrencinin hataları): ')), crit.map(({ m, i }) => h('button.btn.small.' + m.kind, { onclick: () => go(i + 1) }, `${KIND_MARK[m.kind]} ${p.sans[i] ? localSan(p.sans[i]) : ''}`))) : h('div.ok-text.small', 'Büyük hata yok 👏'));
+          const puzzNote = h('div.small');
+          if (g.student_id === me.id && crit.length) {
+            mistakesToPuzzles(g, o ? o.name : 'Rakip').then((n) => {
+              if (n) clear(puzzNote).append('🧩 Bu maçtaki ', h('b', `${n} hatan`), ' bulmaca oldu: ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); window.goTo && window.goTo('puzzles:mine'); } }, 'Bulmacalar → Oyunlarım'));
+            }).catch(() => {});
+          }
+          clear(anaBox).append(puzzNote, crit.length ? h('div.tg-crit', h('div.small', h('b', g.student_id === me.id ? 'Kritik anlar (senin hataların): ' : 'Kritik anlar (öğrencinin hataları): ')), crit.map(({ m, i }) => h('button.btn.small.' + m.kind, { onclick: () => go(i + 1) }, `${KIND_MARK[m.kind]} ${p.sans[i] ? localSan(p.sans[i]) : ''}`))) : h('div.ok-text.small', 'Büyük hata yok 👏'));
         }
       }
       drawInfo(); go(0);
@@ -442,7 +482,8 @@ export default {
         h('div.tg-top', h('button.egp-back', { onclick: showOpponents }, '◂ Rakipler'),
           h('div.tg-head', h('h3', o.name, o.rating ? h('span.muted', ` (${o.rating})`) : null),
             h('div.muted.small', [o.club, o.fide_id ? h('a', { href: `https://ratings.fide.com/profile/${o.fide_id}`, target: '_blank', rel: 'noopener' }, 'FIDE profili') : null].filter(Boolean).reduce((a, x, i) => (i ? [...a, ' · ', x] : [x]), []))),
-          isCoach || o.created_by === me.id ? h('button.btn.small', { onclick: () => editOpponent(o) }, 'Düzenle') : null),
+          h('div.btn-row', h('button.btn.small.primary', { onclick: () => prepDialog(o, gs) }, '♟ Hazırlık: Açılış Tekrarı\'na ekle'),
+            isCoach || o.created_by === me.id ? h('button.btn.small', { onclick: () => editOpponent(o) }, 'Düzenle') : null)),
         o.note ? h('div.panel.small', h('b', '📝 Not: '), o.note) : null,
         h('div.tg-stats', h('div.tg-stat', h('div.tg-stat-n', gs.length), h('div.muted.small', 'maç')), h('div.tg-stat', h('div.tg-stat-n', s.scored ? `${s.ourScore}/${s.scored}` : '–'), h('div.muted.small', 'bizim puanımız'))),
         h('div.tg-cols',
@@ -453,6 +494,31 @@ export default {
           h('span.tg-res.r' + String(myScore(g)).replace('.', '')),
           h('div.tg-main', h('div.tg-title', 'Rakip ', g.color === 'w' ? 'siyah' : 'beyaz', ' · ', h('b', studentName(g.student_id))), h('div.muted.small', [g.tournament, g.round ? `${g.round}. tur` : null, fmtDay(g.played_on)].filter(Boolean).join(' · '))),
           h('div.tg-side', h('div.small', scoreText(myScore(g))), h('div.muted.small', g.opening || '')))))));
+    }
+    // Opponent's lines → one repertoire per colour in the viewer's own Açılış Tekrarı
+    function prepDialog(o, gs) {
+      const sets = [['w', 'b'], ['b', 'w']].map(([oppColor, ours]) => ({ oppColor, ours, lines: prepLines(gs, oppColor) })).filter((x) => x.lines.length);
+      if (!sets.length) { toast('Bu rakiple hazırlık çıkaracak maç yok', 'error'); return; }
+      const noAna = gs.filter((g) => !g.analysis).length;
+      modal({ title: `Hazırlık: ${o.name}`, body: h('div.form-col',
+        h('p', 'Bu rakibin akademimize karşı oynadığı açılışlar, ', h('b', 'Açılış Tekrarı'), '\'na senin repertuvarın olarak eklenir; aralıklı tekrarla çalışırsın.'),
+        h('ul', sets.map((x) => h('li', `Rakip ${x.oppColor === 'w' ? 'beyazken' : 'siyahken'}: ${x.lines.length} çizgi → "${o.name} – sen ${x.ours === 'w' ? 'beyazla' : 'siyahla'}"`,
+          x.lines.some((l) => l.fixed) ? h('span.muted.small', ` (${x.lines.filter((l) => l.fixed).length} çizgide hata yaptığımız yerde motorun önerdiği hamle var)`) : null))),
+        noAna ? h('div.warn-box', `${noAna} maç analiz edilmemiş: onlarda hatalı hamleler düzeltilemez. Önce maçları analiz etmek daha iyi olur.`) : null,
+        isCoach ? h('div.muted.small', 'Senin Açılış Tekrarı\'na eklenir; öğrenciye "Ödev ver → Açılış repertuvarları"ndan gönderebilirsin.') : null),
+      actions: [{ label: 'Vazgeç' }, { label: 'Ekle', primary: true, onClick: () => {
+        (async () => {
+          try {
+            await odata.load();
+            for (const x of sets) {
+              const pgn = x.lines.map((l) => `[Event "Hazırlık"]\n\n${pgnLine(l.sans)} *`).join('\n\n');
+              const { roots } = parsePgnTree(pgn, { maxPlies: 30 });
+              if (roots.length) await odata.add({ name: `${o.name} – sen ${x.ours === 'w' ? 'beyazla' : 'siyahla'}`, color: x.ours, roots });
+            }
+            toast('Açılış Tekrarı\'na eklendi', 'ok');
+          } catch (e) { toast('Eklenemedi: ' + e.message, 'error'); }
+        })();
+      } }] });
     }
     function localSanLine(s) { return s.replace(/([KQRBN])/g, (m) => ({ K: 'Ş', Q: 'V', R: 'K', B: 'F', N: 'A' })[m]); }
 

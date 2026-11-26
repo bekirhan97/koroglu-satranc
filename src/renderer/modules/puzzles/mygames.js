@@ -126,7 +126,11 @@ export async function showMyGames(body, { setActive }) {
   async function fetchGames(user) {
     if (!/^[\w-]{2,30}$/.test(user)) { toast('Geçerli bir Lichess kullanıcı adı yazın', 'error'); return; }
     if (job && job.running) { toast('İnceleme sürüyor'); return; }
-    if (d.user && d.user.toLowerCase() !== user.toLowerCase()) { d.games = {}; d.puzzles = {}; }
+    // another Lichess account: forget its games, but keep the tournament-game puzzles ("tg-…", from Turnuva Maçları)
+    if (d.user && d.user.toLowerCase() !== user.toLowerCase()) {
+      const keep = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => k.startsWith('tg-')));
+      d.games = keep(d.games); d.puzzles = keep(d.puzzles);
+    }
     d.user = user;
     toast('Oyunlar Lichess\'ten alınıyor…');
     const r = await api.lichessGames(user, 30);

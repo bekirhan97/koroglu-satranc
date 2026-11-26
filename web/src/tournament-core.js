@@ -142,3 +142,23 @@ export function opponentStats(games) {
   }
   return out;
 }
+
+// ---------- opponent → preparation repertoire (Açılış Tekrarı) ----------
+// Our games against this opponent, cut before our first mistake; where we went wrong the engine's move is used.
+export function prepLines(games, oppColor) {
+  const lines = [];
+  for (const g of games.filter((x) => x.color !== oppColor && !x.start_fen)) {
+    const p = playMoves(null, g.moves);
+    let n = Math.min(p.sans.length, 24), fix = null;
+    if (g.analysis && g.analysis.evals) {
+      const cls = classify(g.analysis.evals, 'w');
+      for (let i = 0; i < n; i++) { const m = cls.moves[i]; if (m && m.side === g.color && (m.kind === 'mistake' || m.kind === 'blunder')) { n = i; fix = g.analysis.best[i]; break; } }
+    }
+    const sans = p.sans.slice(0, n);
+    if (fix) { try { sans.push(new Chess(p.fens[n]).move({ from: fix.slice(0, 2), to: fix.slice(2, 4), promotion: fix[4] || 'q' }).san); } catch (e) { /* keep */ } }
+    if (sans.length >= 2) lines.push({ sans, fixed: !!fix });
+  }
+  return lines;
+}
+export const pgnLine = (sans) => sans.map((s, i) => (i % 2 === 0 ? `${i / 2 + 1}.${s}` : s)).join(' ');
+

@@ -258,6 +258,7 @@ export default {
     const open = want.find((st) => { const pr = pdata.progress[st.id] || {}; return st.puzzles.some((q) => !pr[q.id]); });
     if (open) solveSet(open, 'next', opts.onSetDone);
     else if (want.length) showSets();
+    else if (opts.tab === 'mine') showMineTab();
     else showTrain();
     return { unmount: () => { swap(null); window.removeEventListener('ratings-changed', refreshPill); } };
   },

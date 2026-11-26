@@ -600,6 +600,10 @@ step('turnuva maçları: öğrenci maç girer, analiz, hoca PGN aktarır + yorum
   await q.waitForSelector('.tg-acc >> text=İsabet', { timeout: 120000 });
   console.log('  analiz:', (await q.locator('.tg-info').textContent()).replace(/\s+/g, ' '), '· işaretli hamle:', await q.locator('.tg-mv.blunder, .tg-mv.mistake').count());
   await shot(q, '47-turnuva-mac');
+  await q.waitForTimeout(1500);
+  console.log('  hatalardan bulmaca:', (await q.locator('.tg-ana').textContent()).replace(/\s+/g, ' ').slice(0, 90), '· kayıt:', await q.evaluate(async () => Object.keys((await window.api.read('mygames/data', {})).puzzles || {}).filter((k) => k.startsWith('tg-')).length));
+  await q.click('.tg-ana a:has-text("Oyunlarım")'); await q.waitForTimeout(1500);
+  console.log('  Oyunlarım kartları:', await q.locator('.mg-card').count());
   await q.context().close();
   const pgn = `[Event "İzmir Küçükler 2026"]\n[Round "2"]\n[Date "2026.11.22"]\n[White "Sukru, Test Ogrenci"]\n[Black "Demir, Ali"]\n[BlackElo "1455"]\n[Result "1/2-1/2"]\n\n1. e4 e5 2. Nf3 Nc6 1/2-1/2\n\n[Event "x"]\n[White "Baska, Biri"]\n[Black "Kimse, Yok"]\n[Result "1-0"]\n\n1. d4 1-0\n`;
   await nav(c, 'Turnuva Maçları'); await c.waitForTimeout(1500);
@@ -614,6 +618,14 @@ step('turnuva maçları: öğrenci maç girer, analiz, hoca PGN aktarır + yorum
   await c.click('button:has-text("Rakip:")'); await c.waitForTimeout(1200);
   console.log('  rakip sayfası:', (await c.locator('.tg-opp').textContent()).replace(/\s+/g, ' ').slice(0, 220));
   await shot(c, '48-rakip');
+  await c.click('button:has-text("Hazırlık")'); await c.waitForTimeout(500);
+  console.log('  hazırlık penceresi:', (await c.locator('.modal').textContent()).replace(/\s+/g, ' ').slice(0, 200));
+  await c.click('.modal button:has-text("Ekle")'); await c.waitForTimeout(1500);
+  console.log('  Açılış Tekrarı:', JSON.stringify((await c.evaluate(async () => window.api.read('openings/index', []))).map((r) => [r.name, r.color, r.lines])));
+  await nav(c, 'Ayarlar'); await c.waitForTimeout(1000);
+  const [dl] = await Promise.all([c.waitForEvent('download', { timeout: 30000 }), c.click('button:has-text("yedeğini indir")')]);
+  const bpath = await dl.path(); const bk = JSON.parse(fs.readFileSync(bpath, 'utf8'));
+  console.log('  yedek:', dl.suggestedFilename(), '· tablolar:', Object.keys(bk.tables).length, '· maç:', (bk.tables.tournament_games || []).length, '· profil:', (bk.tables.profiles || []).length);
 }
 step('bildirim tetikleri');
 const kinds = MOCK.pushes.filter((b) => b.action === 'gonder').map((b) => b.title + ' → ' + b.ids.length);

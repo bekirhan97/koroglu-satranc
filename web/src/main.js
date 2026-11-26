@@ -20,6 +20,7 @@ import play from '../../src/renderer/modules/play/index.js';
 import videos from './videos.js';
 import ranking, { homeRanking } from './ranking.js';
 import tournament from './tournament.js';
+import { backupBox, daysSinceBackup } from './backup.js';
 import schedule, { homeNextLesson, homeLessonReport } from './schedule.js';
 import lichessPlay, { live } from './lichess-play.js';
 import { loadOpenings } from '../../src/renderer/core/openings.js';
@@ -144,6 +145,8 @@ async function start() {
   if (playToken()) live.start();
   if (me.role === 'student') { await syncAssignments(); scheduleReport(lr && lr.username ? 1000 : 5000); }
   else scheduleReport(8000);
+  // free plan keeps no backups: remind the academy owner weekly
+  if (me.role === 'coach' && !me.coach_id) { const d = daysSinceBackup(); if (d == null || d >= 7) setTimeout(() => toast(d == null ? 'Akademinin yedeğini almayı unutma: Ayarlar → Yedek' : `Son yedek ${d} gün önce. Ayarlar → Yedek`, ''), 4000); }
   if (me.role === 'coach') await syncReports();
   // a notification opens the site with #page (e.g. #program)
   const start = location.hash.slice(1);
@@ -237,6 +240,11 @@ function go(id) {
   if (id.startsWith('videos:')) {
     activeId = 'videos'; layout(content);
     videos.mount(content, { go, open: id.slice(7) }).then((r) => { mounted = r; });
+    return;
+  }
+  if (id === 'puzzles:mine') {
+    activeId = 'puzzles'; layout(content);
+    mounted = puzzles.mount(content, { go, tab: 'mine' });
     return;
   }
   if (id.startsWith('puzzles:theme:')) {
@@ -444,6 +452,7 @@ async function renderSettings(root) {
         row('Kullanıcı adı', h('span', '@' + me.username)),
         row('Şifre', h('button.btn.small', { onclick: changePassword }, 'Şifremi değiştir')),
         row('Bildirimler', pushBox, me.role === 'student' ? 'Yeni ödev, ders iptali, ders raporu ve duyurular telefonuna bildirim olarak gelir. Her cihazda ayrı açılır.' : 'Bu cihaz için. Öğrencilere bildirim, ödev/duyuru/ders iptali/ders raporu kaydedilince kendiliğinden gider.'),
+        me.role === 'coach' ? row('Yedek', backupBox(), null) : null,
         row('Lichess hesabı', lichessBox, 'Lichess\'in kendi giriş sayfası açılır; şifreniz bize gelmez. Yalnızca kullanıcı adınız ve puanlarınız alınır.'),
         row('Çıkış', h('button.btn.small', { onclick: logout }, 'Çıkış yap'), 'Ortak kullanılan bir cihazdaysanız çıkış yapmayı unutmayın.')),
       me.role === 'student' ? h('div.panel',
