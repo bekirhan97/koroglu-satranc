@@ -536,11 +536,12 @@ const addClass = async (name, kind, slots) => {
     if (i) await m.locator('button:has-text("+ Gün / saat ekle")').click();
     const row = m.locator('.slot-row').nth(i);
     await row.locator('select').first().selectOption(String(slots[i][0])); await row.locator('input[type=time]').fill(slots[i][1]);
+    if (slots[i][2]) await row.locator('select.slot-coach').selectOption({ label: slots[i][2] });
   }
   await m.locator('label.pick:has-text("Şükrü") input').check();
   await m.locator('button:has-text("Kaydet")').click(); await c.waitForTimeout(2000);
 };
-await addClass('Salı-Perşembe 18:00', 'grup', [[2, '18:00'], [4, '18:00']]);
+await addClass('Salı-Perşembe 18:00', 'grup', [[5, '18:00', 'Ahmet Kaya'], [7, '18:00']]);
 await addClass('Özel – Şükrü', 'ozel', [[3, '17:00'], [5, '17:00']]);
 const sk = MOCK.db.profiles.find((x) => x.username === studentUser);
 console.log('  ders hocası öğrencinin hocası oldu:', MOCK.db.student_coaches.filter((x) => x.student_id === MOCK.db.profiles.find((p) => p.username === studentUser).id).length);
@@ -559,6 +560,7 @@ console.log('  "Salı-Perşembe" filtresi:', await c.locator('table.accounts tbo
 await c.selectOption('.filter-sel >> nth=0', 'all'); await c.waitForTimeout(300);
 step('ikinci antrenör programda yalnızca kendi derslerini görür');
 await c2.click('.nav-item:has-text("Program")'); await c2.waitForTimeout(2000);
+console.log('  2. antrenörün dersleri:', (await c2.locator('.lesson').allTextContents()).map((t) => t.replace(/\s+/g, ' ').slice(0, 40)).join(' | '));
 console.log('  2. antrenör program:', await c2.locator('.lesson').count(), 'ders · seçici:', await c2.locator('.schedule .filter-sel').count(), '· başlık:', (await c2.locator('.schedule .toolbar').textContent()).includes('Derslerim'));
 step('yeni şifre ver: kaydetmeden şifre değişmez, kaydedince yeni şifreyle girilir');
 await nav(c, 'Antrenör'); await c.waitForTimeout(800); await c.click('.tab:has-text("Hesaplar")'); await c.waitForTimeout(1500);

@@ -377,8 +377,8 @@ table.lb tr.me td { background: #fff3d6; font-weight: 700; }
 
 /* ---------- Program: haftada birden çok gün/saat ---------- */
 .slot-list { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.slot-row { display: grid; grid-template-columns: minmax(120px, 160px) 110px 100px 32px; gap: 6px; align-items: center; }
+.slot-row { display: grid; grid-template-columns: minmax(110px, 140px) 105px 90px minmax(150px, 220px) 32px; gap: 6px; align-items: center; }
 .slot-row select, .slot-row input { width: 100%; }
-@media (max-width: 520px) { .slot-row { grid-template-columns: 1fr 90px 80px 28px; width: 100%; } }
+@media (max-width: 620px) { .slot-row { grid-template-columns: 1fr 90px 80px 28px; width: 100%; } .slot-row .slot-coach { grid-column: 1 / 4; grid-row: 2; } }
 
 .warn-box { background: #fdf4e3; border: 1px solid #e9c46a; border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.45; }

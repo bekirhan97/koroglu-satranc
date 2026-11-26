@@ -30,9 +30,10 @@ const fmtDay = (d) => `${d.getDate()} ${['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Ha
 // Weekly times of a class: classes.slots [{wd 1=Pzt, start 'HH:MM', dur}], older rows only weekday/start_time/duration_min.
 export function slotsOf(c) {
   const sl = Array.isArray(c.slots) && c.slots.length ? c.slots : [{ wd: c.weekday, start: c.start_time, dur: c.duration_min }];
-  return sl.map((x) => ({ wd: +x.wd, start: hm(x.start), dur: +x.dur || 60 })).sort((a, b) => a.wd - b.wd || a.start.localeCompare(b.start));
+  // coaches: who teaches THAT day (empty = all the class's coaches)
+  return sl.map((x) => ({ wd: +x.wd, start: hm(x.start), dur: +x.dur || 60, coaches: Array.isArray(x.coaches) ? x.coaches.filter(Boolean) : [] })).sort((a, b) => a.wd - b.wd || a.start.localeCompare(b.start));
 }
-export const slotsText = (c) => slotsOf(c).map((x) => `${DAYS_SHORT[x.wd - 1]} ${x.start}–${endTime(x.start, x.dur)}`).join(', ');
+export const slotsText = (c) => slotsOf(c).map((x) => `${DAYS_SHORT[x.wd - 1]} ${x.start}–${endTime(x.start, x.dur)}` + (x.coaches.length ? ` (${coachShort(x.coaches)})` : '')).join(', ');
 
 // All lessons between two dates: recurring classes expanded, merged with stored sessions and one-off lessons.
 export function expandLessons(classes, sessions, from, days) {
@@ -45,7 +46,7 @@ export function expandLessons(classes, sessions, from, days) {
       if (c.created_at && dateKey(new Date(c.created_at)) > key) continue; // not before the class existed
       const s = sessions.find((x) => x.class_id === c.id && x.date === key);
       out.push({ key: c.id + '|' + key, date: key, cls: c, session: s || null, name: c.name, kind: c.kind, start: hm(s ? s.start_time : slot.start),
-        duration: s ? s.duration_min : slot.dur, location: (s && s.location) || c.location, coach_ids: c.coach_ids, student_ids: (c.class_members || []).map((m) => m.student_id),
+        duration: s ? s.duration_min : slot.dur, location: (s && s.location) || c.location, coach_ids: slot.coaches.length ? slot.coaches : c.coach_ids, student_ids: (c.class_members || []).map((m) => m.student_id),
         cancelled: !!(s && s.status === 'cancelled'), note: s ? s.note : null });
     }
     for (const s of sessions.filter((x) => !x.class_id && x.date === key)) {
@@ -143,7 +144,7 @@ async function coachView(body, me) {
 // Save (or create) the session row of a lesson day and return it.
 async function ensureSession(l, me) {
   if (l.session) return l.session;
-  const row = { academy_id: me.coach_id || me.id, class_id: l.cls.id, date: l.date, start_time: l.start, duration_min: l.duration, location: l.cls.location, coach_ids: l.cls.coach_ids };
+  const row = { academy_id: me.coach_id || me.id, class_id: l.cls.id, date: l.date, start_time: l.start, duration_min: l.duration, location: l.cls.location, coach_ids: l.coach_ids };
   const { data, error } = await supa.from('sessions').upsert(row, { onConflict: 'class_id,date' }).select().single();
   if (error) throw error;
   l.session = data;
@@ -346,14 +347,16 @@ async function classEditDialog(c, me, done) {
   const coaches = Object.values(meta.coaches);
   let kind = c ? c.kind : 'grup';
   const name = h('input', { value: c ? c.name : '', placeholder: 'Örn. Cumartesi 10:00 – Başlangıç' });
-  const slots = c ? slotsOf(c) : [{ wd: 6, start: '10:00', dur: 60 }];
+  const slots = c ? slotsOf(c) : [{ wd: 6, start: '10:00', dur: 60, coaches: [] }];
   const slotHost = h('div.slot-list');
   const drawSlots = () => clear(slotHost).append(...slots.map((sl, i) => h('div.slot-row',
     h('select', { onchange: (e) => { sl.wd = +e.target.value; } }, DAYS.map((d, k) => h('option', { value: k + 1, selected: sl.wd === k + 1 }, d))),
     h('input', { type: 'time', value: sl.start, onchange: (e) => { sl.start = e.target.value; } }),
     h('select', { onchange: (e) => { sl.dur = +e.target.value; } }, [45, 60, 75, 90, 120, 150, 180].map((m) => h('option', { value: m, selected: sl.dur === m }, `${m} dk`))),
+    coaches.length > 1 ? h('select.slot-coach', { title: 'Bu güne giren hoca', onchange: (e) => { sl.coaches = e.target.value ? [e.target.value] : []; } },
+      h('option', { value: '' }, 'Hoca: grubun hocaları'), coaches.map((co) => h('option', { value: co.id, selected: sl.coaches.length === 1 && sl.coaches[0] === co.id }, co.display_name))) : h('span'),
     slots.length > 1 ? h('button.icon-btn', { type: 'button', title: 'Bu saati kaldır', onclick: () => { slots.splice(i, 1); drawSlots(); } }, '✕') : h('span'))),
-    h('button.btn.small', { type: 'button', onclick: () => { const last = slots[slots.length - 1]; slots.push({ wd: last.wd % 7 + 1, start: last.start, dur: last.dur }); drawSlots(); } }, '+ Gün / saat ekle'));
+    h('button.btn.small', { type: 'button', onclick: () => { const last = slots[slots.length - 1]; slots.push({ wd: last.wd % 7 + 1, start: last.start, dur: last.dur, coaches: [] }); drawSlots(); } }, '+ Gün / saat ekle'));
   drawSlots();
   const loc = h('input', { value: c ? c.location || '' : '', placeholder: 'Zoom / Meet bağlantısını yapıştır (ya da Online)' });
   const coachSet = new Set(c ? c.coach_ids : [me.id]);
@@ -375,7 +378,10 @@ async function classEditDialog(c, me, done) {
     if (new Set(slots.map((x) => x.wd)).size !== slots.length) { toast('Aynı güne iki saat eklenemez; o gün için süreyi uzatın ya da ayrı bir ders açın', 'error'); return false; }
     const sorted = slots.slice().sort((a, b) => a.wd - b.wd || a.start.localeCompare(b.start));
     const row = { name: name.value.trim(), kind, weekday: sorted[0].wd, start_time: sorted[0].start, duration_min: sorted[0].dur,
-      slots: sorted.map((x) => ({ wd: x.wd, start: x.start, dur: x.dur })), location: loc.value.trim() || null, coach_ids: [...coachSet] };
+      // once one day has its own coach, the other days get the ticked coaches explicitly (otherwise the day's coach would count for them too)
+      slots: sorted.map((x) => ({ wd: x.wd, start: x.start, dur: x.dur, ...(x.coaches.length ? { coaches: x.coaches } : sorted.some((y) => y.coaches.length) ? { coaches: [...coachSet] } : {}) })), location: loc.value.trim() || null,
+      // the class's coaches = the ticked ones + whoever teaches one of its days (their programme and student list use this)
+      coach_ids: [...new Set([...coachSet, ...sorted.flatMap((x) => x.coaches)])] };
     if (!row.name) { toast('Bir ad yazın', 'error'); return false; }
     (async () => {
       try {
@@ -407,7 +413,7 @@ async function classEditDialog(c, me, done) {
       field('Tür', kindSeg), field('Ad', name, 'Grup dersinde öğrencilerin grup adı olur. Özel derste örn. "Özel – Ali Yılmaz".'),
       h('div.form-l', 'Haftalık gün ve saatler'), slotHost,
       field('Ders bağlantısı', loc),
-      coaches.length ? field('Hocaları', h('div.coach-pick', coaches.map((co) => h('label.chk', h('input', { type: 'checkbox', checked: coachSet.has(co.id), onchange: (e) => { if (e.target.checked) coachSet.add(co.id); else coachSet.delete(co.id); } }), ' ', co.display_name)))) : null,
+      coaches.length ? field('Hocaları', h('div.coach-pick', coaches.map((co) => h('label.chk', h('input', { type: 'checkbox', checked: coachSet.has(co.id), onchange: (e) => { if (e.target.checked) coachSet.add(co.id); else coachSet.delete(co.id); } }), ' ', co.display_name))), 'Günlerde ayrıca hoca seçilmediyse bu hocalar o güne girer. Bir güne hoca seçerseniz o gün yalnızca o hoca girer ve o ders yalnızca onun programında görünür.') : null,
       h('div.form-l', 'Öğrenciler'), search, stList, attHost) });
 }
 
