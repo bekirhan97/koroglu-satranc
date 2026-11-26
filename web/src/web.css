@@ -382,3 +382,6 @@ table.lb tr.me td { background: #fff3d6; font-weight: 700; }
 @media (max-width: 620px) { .slot-row { grid-template-columns: 1fr 90px 80px 28px; width: 100%; } .slot-row .slot-coach { grid-column: 1 / 4; grid-row: 2; } }
 
 .warn-box { background: #fdf4e3; border: 1px solid #e9c46a; border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.45; }
+.eg-lv-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+.eg-lv-dot.lv1 { background: #4caf50; } .eg-lv-dot.lv2 { background: #8bc34a; } .eg-lv-dot.lv3 { background: #fbc02d; }
+.eg-lv-dot.lv4 { background: #fb8c00; } .eg-lv-dot.lv5 { background: #e53935; } .eg-lv-dot.lv6 { background: #6a1b9a; }

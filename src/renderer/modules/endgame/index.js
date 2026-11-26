@@ -244,13 +244,14 @@ export default {
       const cur = await loadCurriculum(); await progress.load();
       const c = cur.chapters.find((x) => x.id === chId);
       const ls = cur.lessons.filter((l) => l.ch === chId && (!state.level || l.level === state.level));
-      const topics = [...new Set(ls.map((l) => l.topic))];
+      // sections by level (easy → hard); inside a level the curriculum order (concept by concept, then difficulty)
+      const levels = [...new Set(ls.map((l) => l.level))].sort((a, b) => a - b);
       const s = stat(ls);
       clear(body).append(h('div.eg-chapter-page',
         h('div.eg-ch-top', h('button.egp-back', { onclick: () => showHome() }, '◂ Bölümler'),
           h('div.eg-ch-title', h('span.eg-tile-icon.sm', c.icon), h('div', h('h3', c.name), h('div.muted.small', `${s.d}/${s.n} konum · ★ ${s.s}`)))),
-        topics.map((t) => h('section.eg-topic', h('h4', t, h('span.muted.small', ` ${ls.filter((l) => l.topic === t && done(l)).length}/${ls.filter((l) => l.topic === t).length}`)),
-          h('div.eg-cards', ls.filter((l) => l.topic === t).map((l) => {
+        levels.map((lv) => h('section.eg-topic', h('h4', h('span.eg-lv-dot.lv' + lv), levelName(lv), h('span.muted.small', ` ${ls.filter((l) => l.level === lv && done(l)).length}/${ls.filter((l) => l.level === lv).length}`)),
+          h('div.eg-cards', ls.filter((l) => l.level === lv).map((l) => {
             const p = done(l);
             return h('button.eg-card' + (p ? '.done' : ''), { id: 'egc-' + l.id, onclick: () => open(l, ls, () => showChapter(chId, l.id), c.name) },
               thumb(l.fen, 128, studentSide(l) === 'b'),

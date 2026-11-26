@@ -4,7 +4,7 @@
 Input: a JSON list of positions extracted from the coach's endgame PGN books (positions + chapter labels only;
 no annotations) and verified with the Lichess tablebase (<= 7 pieces) or Stockfish (practical positions):
   [{ book, i, chap, sub, fen, n, src: 'tb'|'sf', result: 'win'|'draw'|'loss'|'unclear', dtm, cp }]
-Usage: python3 scripts/build-endgames.py verified.json resources/endgames.json
+Usage: python3 scripts/build-endgames.py verified.json resources/endgames.json scripts/endgame-difficulty.json
 Titles and explanations are written here (Turkish, our own words)."""
 import json, re, sys, collections
 import chess
@@ -208,23 +208,59 @@ for o in sorted(P, key=lambda x: (order.get(x['book'], 9), x['i'])):
     lessons.append({'id': f"eg-{o['book'][0]}{o['i']}", 'ch': ch, 'topic': t, 'title': title, 'fen': o['fen'], 'goal': goal,
                     'oppFirst': opp, 'text': text, 'level': level_of(o, ch), 'src': o['src']})
 
-# order inside a chapter: by topic (first appearance by level), then level
-first = {}
-for l in lessons:
-    k = (l['ch'], l['topic'])
-    first[k] = min(first.get(k, 9), l['level'])
-PRIO = ['Vezir ile mat', 'Kale ile mat', 'Kutu yöntemi', 'Pata dikkat', 'İki kale ile mat', 'İki vezirle mat', 'Vezir ve kale ile mat',
-        'İki fil ile mat', 'Fil ve at ile mat', 'Atla mat', 'Hangi taşlar mat edebilir?']
-def tkey(l):
-    t = l['topic']
-    late = 2 if t == 'Kendini sına' else 1 if t == 'Ustaların oyunlarından' else 0
-    return (late, PRIO.index(t) if t in PRIO else 99, first[(l['ch'], t)], t)
-lessons.sort(key=lambda l: ([c[0] for c in CHAPTERS].index(l['ch']), tkey(l), l['level']))
-# make ids unique
+# ids: unique in source order (stable — students' progress is keyed by id)
 seen = collections.Counter()
 for l in lessons:
     seen[l['id']] += 1
     if seen[l['id']] > 1: l['id'] += f"-{seen[l['id']]}"
+
+# ---- difficulty: measured (scripts/measure-endgames.py) → level + order ----
+DIFF = json.load(open(sys.argv[3])) if len(sys.argv) > 3 else {}
+def kinds(fen):
+    return len({p.piece_type for p in chess.Board(fen).piece_map().values() if p.piece_type != chess.KING})
+def raw_score(l):
+    m = DIFF.get(l['fen'])
+    if not m: return None
+    return (1.3 * m['only'] + 1.0 * m['first'] + 3.0 * (1 - m['frac']) + 0.06 * min(m['L'], 40)
+            + 0.35 * kinds(l['fen']) + (0.8 if l['src'] == 'sf' else 0))
+src_level = {l['id']: l['level'] for l in lessons}          # book-based guess (Silman part / piece count)
+scored = [(raw_score(l), l) for l in lessons]
+vals = sorted(v for v, _ in scored if v is not None)
+def pct(v):
+    import bisect
+    return bisect.bisect_left(vals, v) / max(1, len(vals) - 1)
+for v, l in scored:
+    p = pct(v) if v is not None else (src_level[l['id']] - 1) / 5
+    if l['id'].startswith('eg-s') and v is not None:             # Silman's own rating of the chapter still counts a little
+        p = 0.75 * p + 0.25 * (src_level[l['id']] - 1) / 5
+    l['_d'] = round(p, 4)
+cuts = [0.15, 0.35, 0.55, 0.75, 0.9]
+for l in lessons:
+    l['level'] = 1 + sum(l['_d'] >= c for c in cuts)
+
+# order inside a chapter: by level (easy → hard); inside a level concept by concept in teaching order, then difficulty.
+TOPIC_ORDER = ['Vezir ile mat', 'Kale ile mat', 'Kutu yöntemi', 'Pata dikkat', 'İki kale ile mat', 'İki vezirle mat', 'Vezir ve kale ile mat',
+    'Temel matlar', 'İki fil ile mat', 'Fil ve at ile mat', 'Atla mat', 'Hangi taşlar mat edebilir?',
+    'Şahın gücü', 'Kare kuralı', 'Şah ve piyon tek şaha karşı', 'Opozisyon', 'Anahtar kareler', 'Kale piyonu', 'Uzak opozisyon',
+    'Üçgenleme', 'Karşılıklı zugzwang (trebuşe)', 'Şah ve piyon şah ve piyona karşı', 'Şah ve piyon', 'Piyon yarışları', 'Uzak geçer piyon',
+    'Korunan geçer piyon', 'Bağlı piyonlar', 'Çift piyonlar', 'Aynı kanatta piyonlar', 'Piyon kırılması', 'Tavuk kümesindeki tilki',
+    'Şahı kesmek', 'Kale piyona karşı', 'Philidor', 'Lucena', 'Kale ve piyon kaleye karşı', 'Kale piyonun önünde', 'Vancura',
+    'Savunma teknikleri', '7. sıra', 'Kale ve iki bağlı piyon', 'Kale ve piyonlar', 'Kale oyunsonu yol haritası',
+    'Fil piyona karşı', 'Doğru köşe', 'Yanlış renkli fil', 'Aynı renkli filler', 'Centurini', 'Farklı renkli filler', 'Fil oyunsonu',
+    'At piyona karşı', 'At oyunsonu', 'Fil ve at', 'Kale hafif taşa karşı', 'Hafif taş vezire karşı',
+    'Vezir piyona karşı', 'Vezir kaleye karşı', 'Vezir oyunsonu', 'Taşı hapsetmek', 'Kale (fortress) kurmak', 'Saavedra', 'Oyunsonu taktikleri']
+def tkey(l):
+    t = l['topic']
+    late = 2 if t == 'Kendini sına' else 1 if t == 'Ustaların oyunlarından' else 0
+    return (late, TOPIC_ORDER.index(t) if t in TOPIC_ORDER else 99, t)
+lessons.sort(key=lambda l: ([c[0] for c in CHAPTERS].index(l['ch']), l['level'], tkey(l), l['_d']))
+# titles numbered in the new order
+num = collections.Counter()
+for l in lessons:
+    if l['topic'] != 'Ustaların oyunlarından' or ' – ' not in l['title']:
+        num[(l['ch'], l['topic'])] += 1
+        l['title'] = f"{l['topic']} {num[(l['ch'], l['topic'])]}"
+    l['diff'] = l.pop('_d')
 chapters = [{'id': c[0], 'name': c[1], 'desc': c[2], 'icon': c[3], 'kind': c[4]} for c in CHAPTERS if any(l['ch'] == c[0] for l in lessons)]
 json.dump({'chapters': chapters, 'lessons': lessons}, open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
 print(len(lessons), 'lessons', collections.Counter(l['ch'] for l in lessons))
