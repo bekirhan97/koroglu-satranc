@@ -37,20 +37,21 @@ function table(rows, kind, period, { limit = 50, showGroup = false } = {}) {
 
 // Full view: used by the "Sıralama" module (students) and Antrenör → Sıralama (coaches).
 export function rankingView({ isCoach = false, myGroup = null, groups = [] } = {}) {
-  const st = { kind: 'antrenman', period: 'week', scope: isCoach ? 'academy' : (myGroup ? 'group' : 'academy'), grp: groups[0] || null };
+  const st = { kind: 'antrenman', period: 'week', scope: isCoach ? 'academy' : (myGroup ? 'group' : 'academy'), grp: isCoach ? groups[0] || null : myGroup };
+  const pickGroup = isCoach || groups.length > 1;
   const root = h('div.ranking');
   const body = h('div.panel.lb-panel');
   const seg = (items, key, onPick) => h('div.seg.lb-seg', items.map(([k, l]) => h('button' + (st[key] === k ? '.active' : ''), { onclick: () => { st[key] = k; onPick && onPick(); draw(); } }, l)));
   async function draw() {
-    const scopeItems = isCoach ? [['academy', 'Akademi geneli'], ...(groups.length ? [['group', 'Grup']] : [])] : [...(myGroup ? [['group', `Grubum (${myGroup})`]] : []), ['academy', 'Akademi geneli']];
+    const scopeItems = isCoach ? [['academy', 'Akademi geneli'], ...(groups.length ? [['group', 'Grup']] : [])] : [...(myGroup ? [['group', groups.length > 1 ? 'Grubum' : `Grubum (${myGroup})`]] : []), ['academy', 'Akademi geneli']];
     clear(root).append(
       h('div.lb-controls', seg(KINDS, 'kind'), seg(PERIODS, 'period'),
         h('div.btn-row', seg(scopeItems, 'scope'),
-          isCoach && st.scope === 'group' ? h('select.filter-sel', { onchange: (e) => { st.grp = e.target.value; draw(); } }, groups.map((g) => h('option', { value: g, selected: g === st.grp }, g))) : null)),
+          pickGroup && st.scope === 'group' ? h('select.filter-sel', { onchange: (e) => { st.grp = e.target.value; draw(); } }, groups.map((g) => h('option', { value: g, selected: g === st.grp }, g))) : null)),
       body);
     clear(body).append(h('div.muted.small', 'Yükleniyor…'));
     try {
-      const rows = await fetchRanking(st.kind, st.period, st.scope, st.scope === 'group' && isCoach ? st.grp : null);
+      const rows = await fetchRanking(st.kind, st.period, st.scope, st.scope === 'group' ? st.grp : null);
       clear(body).append(...[
         h('div.panel-title', `${KINDS.find((k) => k[0] === st.kind)[1]} · ${PERIODS.find((p) => p[0] === st.period)[1]}`),
         table(rows, st.kind, st.period, { showGroup: st.scope === 'academy' }),
@@ -85,8 +86,15 @@ export default {
   ready: true,
   async mount(root) {
     const me = window.__me || {};
+    // a student can be in several groups (Program): let them pick which one
+    let groups = me.group_name ? [me.group_name] : [];
+    try {
+      const { data } = await supa.from('classes').select('name, kind');
+      groups = [...new Set([...groups, ...(data || []).filter((c) => c.kind === 'grup').map((c) => c.name)])].sort((a, b) => a.localeCompare(b, 'tr'));
+    } catch (e) { /* keep the primary group */ }
+    const myGroup = me.group_name || groups[0] || null;
     clear(root).append(h('div.module', h('div.module-head', h('h2', this.title)),
-      h('div.module-body', rankingView({ isCoach: false, myGroup: me.group_name || null }))));
+      h('div.module-body', rankingView({ isCoach: false, myGroup, groups }))));
     return { unmount() {} };
   },
 };

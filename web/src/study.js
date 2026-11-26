@@ -82,7 +82,7 @@ export async function studyTab(body) {
     }
     return h('table.kv.study-table', h('thead', h('tr', th('name', 'Öğrenci'), COLS.map(([key, s, l]) => th(key, s, l)))),
       h('tbody', vis.map((r) => h('tr' + (r.hasReport ? '' : '.no-report'),
-        h('td', h('b', r.name), h('div.muted.small', [r.lesson_type === 'ozel' ? 'Özel ders' : r.group, !r.hasReport ? 'henüz giriş yok' : r.updated ? 'güncel: ' + new Date(r.updated).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) : ''].filter(Boolean).join(' · '))),
+        h('td', h('b', r.name), h('div.muted.small', [r.group, !r.hasReport ? 'henüz giriş yok' : r.updated ? 'güncel: ' + new Date(r.updated).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) : ''].filter(Boolean).join(' · '))),
         COLS.map(([key]) => cell(r, key))))),
       h('tfoot',
         h('tr', h('td', h('b', `Toplam (${sum.n} öğrenci)`)), COLS.map(([key]) => h('td', h('b', key === 'lessons' ? (sum.total.lessonsTotal ? `${sum.total.lessonsCame}/${sum.total.lessonsTotal}` : '–') : num(sum.total[key]))))),

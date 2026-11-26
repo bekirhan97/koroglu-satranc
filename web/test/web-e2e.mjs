@@ -519,6 +519,38 @@ console.log('  içe aktarılan:', MOCK.db.endgame_positions.length, '· klasör:
 await nav(c, 'Antrenör'); await c.waitForTimeout(1000); await c.click('.tab:has-text("Ödev ver")'); await c.waitForTimeout(1500);
 console.log('  ödevde oyunsonu paneli:', (await c.locator('.panel:has(.panel-title:text-is("Oyunsonu"))').textContent().catch(() => 'yok')).replace(/\s+/g, ' ').slice(0, 160));
 
+step('program: haftada iki gün, ikinci grup ve özel ders');
+await nav(c, 'Program'); await c.waitForTimeout(1500);
+const addClass = async (name, kind, slots) => {
+  await c.click('button:has-text("Gruplar ve özel dersler")'); await c.waitForTimeout(600);
+  await c.click('.modal button:has-text("+ Yeni grup / özel ders")'); await c.waitForTimeout(600);
+  const m = c.locator('.modal').last();
+  if (kind === 'ozel') await m.locator('.seg button:has-text("Özel ders")').click();
+  await m.locator('input[placeholder^="Örn. Cumartesi"]').fill(name);
+  for (let i = 0; i < slots.length; i++) {
+    if (i) await m.locator('button:has-text("+ Gün / saat ekle")').click();
+    const row = m.locator('.slot-row').nth(i);
+    await row.locator('select').first().selectOption(String(slots[i][0])); await row.locator('input[type=time]').fill(slots[i][1]);
+  }
+  await m.locator('label.pick:has-text("Şükrü") input').check();
+  await m.locator('button:has-text("Kaydet")').click(); await c.waitForTimeout(2000);
+};
+await addClass('Salı-Perşembe 18:00', 'grup', [[2, '18:00'], [4, '18:00']]);
+await addClass('Özel – Şükrü', 'ozel', [[3, '17:00'], [5, '17:00']]);
+const sk = MOCK.db.profiles.find((x) => x.username === studentUser);
+console.log('  yeni ders saatleri:', JSON.stringify(MOCK.db.classes.find((x) => x.name === 'Salı-Perşembe 18:00').slots), '· Şükrü ana grubu:', sk.group_name);
+await c.click('button:has-text("Gruplar ve özel dersler")'); await c.waitForTimeout(600);
+console.log('  ders listesi:', (await c.locator('.modal .class-row').allTextContents()).map((t) => t.replace(/\s+/g, ' ').replace('Düzenle', '')).join(' | '));
+await shot(c, '07i-cok-saatli-dersler');
+await c.locator('.modal').last().locator('button:has-text("Kapat")').click(); await c.waitForTimeout(300);
+console.log('  haftalık takvimde ders kartı:', await c.locator('.lesson').count());
+await shot(c, '07j-program-cok-saat');
+await nav(c, 'Antrenör'); await c.waitForTimeout(1000); await c.click('.tab:has-text("Hesaplar")'); await c.waitForTimeout(1500);
+console.log('  Şükrü etiketi:', (await c.locator('table.accounts tbody tr', { hasText: 'Şükrü' }).locator('.chip').first().textContent()).trim(),
+  '· filtre seçenekleri:', (await c.locator('.filter-sel').first().locator('option').allTextContents()).join(', '));
+await c.selectOption('.filter-sel >> nth=0', 'g:Salı-Perşembe 18:00'); await c.waitForTimeout(500);
+console.log('  "Salı-Perşembe" filtresi:', await c.locator('table.accounts tbody tr').count());
+await c.selectOption('.filter-sel >> nth=0', 'all'); await c.waitForTimeout(300);
 step('bildirim tetikleri');
 const kinds = MOCK.pushes.filter((b) => b.action === 'gonder').map((b) => b.title + ' → ' + b.ids.length);
 console.log('  gönderilen bildirimler:', kinds.join(' | '));

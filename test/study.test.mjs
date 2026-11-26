@@ -26,3 +26,11 @@ test('Öğrenci ve grup toplamları', () => {
   assert.equal(groupRows([a, b])[0].sum.n, 2);
   assert.match(toCsv([a, b], 'Son 3 gün'), /"Ali";"Cmt 10";"10"/);
 });
+
+test('Birden çok grup ve özel ders alan öğrenci her grupta sayılır', () => {
+  const c = studentRow({ id: 'c', display_name: 'Can', group_name: 'Cmt 10', groups: ['Cmt 10', 'Sal 18'], hasOzel: true }, null, { from: '2026-11-24', to: '2026-11-26' });
+  const d = studentRow({ id: 'd', display_name: 'Deniz', group_name: 'Cmt 10' }, null, { from: '2026-11-24', to: '2026-11-26' });
+  assert.equal(c.group, 'Cmt 10 · Sal 18 · Özel ders');
+  const g = Object.fromEntries(groupRows([c, d]).map((x) => [x.name, x.sum.n]));
+  assert.deepEqual(g, { 'Cmt 10': 2, 'Sal 18': 1, 'Özel ders': 1 });
+});

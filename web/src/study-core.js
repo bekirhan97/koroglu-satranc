@@ -40,7 +40,9 @@ const ACT = ['puzzles', 'reviews', 'openings', 'gtmGames', 'playGames', 'videos'
 
 // rep: the student's latest report; scores: [{student_id, created_at}]; attendance: [{student_id, status, date}]
 export function studentRow(st, rep, { from, to, scores = [], attendance = [], lichess = null }) {
-  const row = { id: st.id, name: st.display_name, group: st.group_name || '', lesson_type: st.lesson_type, hasReport: !!rep };
+  const groups = st.groups || (st.group_name ? [st.group_name] : []);
+  const ozel = !!(st.hasOzel || st.lesson_type === 'ozel');
+  const row = { id: st.id, name: st.display_name, groups, ozel, group: [...groups, ...(ozel ? ['Özel ders'] : [])].join(' · '), lesson_type: st.lesson_type, hasReport: !!rep };
   for (const k of ACT) row[k] = 0;
   row.days = 0;
   const days = (rep && rep.activity && rep.activity.days) || [];
@@ -81,9 +83,12 @@ export function summarize(rows) {
 export function groupRows(rows) {
   const by = new Map();
   for (const r of rows) {
-    const g = r.lesson_type === 'ozel' ? 'Özel ders' : (r.group || 'Grupsuz');
-    if (!by.has(g)) by.set(g, []);
-    by.get(g).push(r);
+    // a student in two groups (or group + private lesson) counts in each of them
+    const keys = [...(r.groups || []), ...(r.ozel ? ['Özel ders'] : [])];
+    for (const g of keys.length ? keys : ['Grupsuz']) {
+      if (!by.has(g)) by.set(g, []);
+      by.get(g).push(r);
+    }
   }
   return [...by.entries()].map(([name, rs]) => ({ name, rows: rs, sum: summarize(rs) })).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
 }
@@ -91,6 +96,6 @@ export function groupRows(rows) {
 export function toCsv(rows, label) {
   const head = ['Öğrenci', 'Grup', ...COLS.filter(([k]) => k !== 'lessons').map(([, s]) => s), 'Derse geldi', 'Ders sayısı'];
   const lines = [[`Çalışma raporu: ${label}`], head];
-  for (const r of rows) lines.push([r.name, r.lesson_type === 'ozel' ? 'Özel ders' : r.group, ...COLS.filter(([k]) => k !== 'lessons').map(([k]) => (r[k] == null ? '' : r[k])), r.lessonsCame, r.lessonsTotal]);
+  for (const r of rows) lines.push([r.name, r.group, ...COLS.filter(([k]) => k !== 'lessons').map(([k]) => (r[k] == null ? '' : r[k])), r.lessonsCame, r.lessonsTotal]);
   return '﻿' + lines.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n');
 }

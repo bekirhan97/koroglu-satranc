@@ -9,6 +9,8 @@ export function createMock() {
   const pushes = []; // calls to the bildirim function
   const tokens = new Map(); // token -> user id
   const DOMAIN = 'kullanici.koroglu-satranc.app';
+  const groupsOfMock = (sid) => db.class_members.filter((m) => m.student_id === sid).map((m) => db.classes.find((c) => c.id === m.class_id)).filter((c) => c && c.kind === 'grup').map((c) => c.name);
+  const myGroupsMock = (p) => [...new Set([...(p.group_name ? [p.group_name] : []), ...groupsOfMock(p.id)])];
   const keyOf = { kv: ['user_id', 'key'], reports: ['student_id'], profiles: ['id'], assignments: ['id'], videos: ['id'], assignment_targets: ['assignment_id', 'student_id'], announcements: ['id'], lichess_accounts: ['user_id'], classes: ['id'], class_members: ['class_id', 'student_id'], sessions: ['id'], attendance: ['session_id', 'student_id'], scores: ['id'], client_errors: ['id'], session_notes: ['session_id', 'student_id'], session_reads: ['session_id', 'student_id'], endgame_positions: ['id'] };
 
   const prof = (id) => db.profiles.find((x) => x.id === id);
@@ -99,12 +101,17 @@ export function createMock() {
     }
     if (p === '/rest/v1/rpc/class_sync' || p === '/rest/v1/rpc/class_release') {
       const b = JSON.parse(req.postData() || '{}');
-      if (b.cid) { const c = db.classes.find((x) => x.id === b.cid); if (c && c.kind === 'grup') for (const m of db.class_members.filter((x) => x.class_id === c.id)) prof(m.student_id).group_name = c.name; }
+      // same rule as private.regroup: keep the primary group while still a member, else first group class
+      const ids = new Set(b.cid ? db.class_members.filter((x) => x.class_id === b.cid).map((x) => x.student_id) : []);
+      for (const pr of db.profiles.filter((x) => x.role === 'student' && (ids.has(x.id) || (b.old_name && x.group_name === b.old_name)))) {
+        const gs = groupsOfMock(pr.id).sort();
+        pr.group_name = gs.includes(pr.group_name) ? pr.group_name : gs[0] || (pr.group_name === b.old_name ? null : pr.group_name);
+      }
       return json(route, 204);
     }
     if (p === '/rest/v1/rpc/leaderboard2') {
       const b = JSON.parse(req.postData() || '{}'); const uid = userFromReq(req); const me = prof(uid);
-      const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === academyOf(me) && (x.leaderboard_ok || x.id === uid) && (b.scope !== 'group' || x.group_name === (me.role === 'coach' ? b.grp : me.group_name)));
+      const team = db.profiles.filter((x) => x.role === 'student' && x.coach_id === academyOf(me) && (x.leaderboard_ok || x.id === uid) && (b.scope !== 'group' || (() => { const g = me.role === 'coach' ? b.grp : (b.grp && myGroupsMock(me).includes(b.grp) ? b.grp : me.group_name); return x.group_name === g || groupsOfMock(x.id).includes(g); })()));
       const rows = team.map((t) => { let v = 0;
         if (b.kind === 'antrenman') { const r = (db.reports.find((x) => x.student_id === t.id) || {}).report; v = r ? (b.period === 'all' ? r.ratings.puzzles.r : r.activity.days.slice(-7).reduce((a, d) => a + (d.puzzles || 0) + (d.reviews || 0), 0)) : 0; }
         else v = Math.max(0, ...db.scores.filter((x) => x.student_id === t.id && x.kind === b.kind).map((x) => x.score));
@@ -133,7 +140,7 @@ export function createMock() {
         if ((url.searchParams.get('select') || '').includes('student_coaches')) rows = rows.map((r) => ({ ...r, student_coaches: db.student_coaches.filter((x) => x.student_id === r.id).map((x) => ({ coach_id: x.coach_id })) })); }
       if (table === 'assignments') rows = rows.filter((a) => a.coach_id === uid || (isCoach && academyOf(prof(a.coach_id)) === acad) || db.assignment_targets.some((t) => t.assignment_id === a.id && t.student_id === uid));
       if (table === 'videos') rows = rows.filter((v) => academyOf(prof(v.coach_id)) === acad);
-      if (table === 'announcements') rows = rows.filter((a) => a.coach_id === uid || (meP && meP.role === 'student' && (a.coach_id === acad || db.student_coaches.some((x) => x.student_id === uid && x.coach_id === a.coach_id)) && (!a.group_name || a.group_name === meP.group_name)));
+      if (table === 'announcements') rows = rows.filter((a) => a.coach_id === uid || (meP && meP.role === 'student' && (a.coach_id === acad || db.student_coaches.some((x) => x.student_id === uid && x.coach_id === a.coach_id)) && (!a.group_name || myGroupsMock(meP).includes(a.group_name))));
       if (table === 'classes') { rows = rows.filter((c) => (isCoach && c.academy_id === acad) || db.class_members.some((m) => m.class_id === c.id && m.student_id === uid));
         if ((url.searchParams.get('select') || '').includes('class_members')) rows = rows.map((c) => ({ ...c, class_members: db.class_members.filter((m) => m.class_id === c.id && (isCoach || m.student_id === uid)).map((m) => ({ student_id: m.student_id })) })); }
       if (table === 'sessions') { rows = rows.filter((x) => (isCoach && x.academy_id === acad) || (x.class_id && db.class_members.some((m) => m.class_id === x.class_id && m.student_id === uid)) || (x.student_ids || []).includes(uid));

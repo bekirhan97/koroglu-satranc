@@ -81,7 +81,7 @@ export default {
         const asg = r.assignments.length ? r.assignments.reduce((a, x) => a + x.pct, 0) / r.assignments.length : null;
         const stale = Date.now() - r.createdAt > 8 * 86400e3;
         return h('tr.clickable', { onclick: () => showStudent(s.id) },
-          h('td', h('b', s.name), h('div.sub', metaOf(s.id) ? (metaOf(s.id).lesson_type === 'ozel' ? 'Özel ders' + (metaOf(s.id).group_name ? ' · ' + metaOf(s.id).group_name : '') : metaOf(s.id).group_name || 'Grupsuz') + ' · ' : null, `Rapor: ${fmtDate(r.createdAt)} (${ago(r.createdAt)})`, stale ? h('span.bad-text', ' · eski') : null)),
+          h('td', h('b', s.name), h('div.sub', metaOf(s.id) ? (metaOf(s.id).label || metaOf(s.id).group_name || 'Grupsuz') + ' · ' : null, `Rapor: ${fmtDate(r.createdAt)} (${ago(r.createdAt)})`, stale ? h('span.bad-text', ' · eski') : null)),
           h('td.num', r.ratings.puzzles.r, prev ? h('span.delta' + (r.ratings.puzzles.r >= prev.puzzles ? '.up' : '.down'), ' ' + sign(r.ratings.puzzles.r - prev.puzzles)) : null),
           h('td.num', r.ratings.gtm.r, prev ? h('span.delta' + (r.ratings.gtm.r >= prev.gtm ? '.up' : '.down'), ' ' + sign(r.ratings.gtm.r - prev.gtm)) : null),
           h('td.num', r.activity.streak.current, h('span.muted', ' gün')),

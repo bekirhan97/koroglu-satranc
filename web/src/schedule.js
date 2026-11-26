@@ -27,17 +27,25 @@ const hm = (t) => String(t || '').slice(0, 5);
 const endTime = (t, min) => { const [hh, mm] = hm(t).split(':').map(Number); const e = hh * 60 + mm + (min || 60); return `${pad(Math.floor(e / 60) % 24)}:${pad(e % 60)}`; };
 const fmtDay = (d) => `${d.getDate()} ${['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'][d.getMonth()]}`;
 
+// Weekly times of a class: classes.slots [{wd 1=Pzt, start 'HH:MM', dur}], older rows only weekday/start_time/duration_min.
+export function slotsOf(c) {
+  const sl = Array.isArray(c.slots) && c.slots.length ? c.slots : [{ wd: c.weekday, start: c.start_time, dur: c.duration_min }];
+  return sl.map((x) => ({ wd: +x.wd, start: hm(x.start), dur: +x.dur || 60 })).sort((a, b) => a.wd - b.wd || a.start.localeCompare(b.start));
+}
+export const slotsText = (c) => slotsOf(c).map((x) => `${DAYS_SHORT[x.wd - 1]} ${x.start}–${endTime(x.start, x.dur)}`).join(', ');
+
 // All lessons between two dates: recurring classes expanded, merged with stored sessions and one-off lessons.
 export function expandLessons(classes, sessions, from, days) {
   const out = [];
   for (let i = 0; i < days; i++) {
     const d = addDays(from, i), key = dateKey(d), wd = ((d.getDay() + 6) % 7) + 1;
     for (const c of classes) {
-      if (c.weekday !== wd) continue;
+      const slot = slotsOf(c).find((x) => x.wd === wd);
+      if (!slot) continue;
       if (c.created_at && dateKey(new Date(c.created_at)) > key) continue; // not before the class existed
       const s = sessions.find((x) => x.class_id === c.id && x.date === key);
-      out.push({ key: c.id + '|' + key, date: key, cls: c, session: s || null, name: c.name, kind: c.kind, start: hm(s ? s.start_time : c.start_time),
-        duration: s ? s.duration_min : c.duration_min, location: (s && s.location) || c.location, coach_ids: c.coach_ids, student_ids: (c.class_members || []).map((m) => m.student_id),
+      out.push({ key: c.id + '|' + key, date: key, cls: c, session: s || null, name: c.name, kind: c.kind, start: hm(s ? s.start_time : slot.start),
+        duration: s ? s.duration_min : slot.dur, location: (s && s.location) || c.location, coach_ids: c.coach_ids, student_ids: (c.class_members || []).map((m) => m.student_id),
         cancelled: !!(s && s.status === 'cancelled'), note: s ? s.note : null });
     }
     for (const s of sessions.filter((x) => !x.class_id && x.date === key)) {
@@ -132,7 +140,7 @@ async function coachView(body, me) {
 // Save (or create) the session row of a lesson day and return it.
 async function ensureSession(l, me) {
   if (l.session) return l.session;
-  const row = { academy_id: me.coach_id || me.id, class_id: l.cls.id, date: l.date, start_time: l.cls.start_time, duration_min: l.cls.duration_min, location: l.cls.location, coach_ids: l.cls.coach_ids };
+  const row = { academy_id: me.coach_id || me.id, class_id: l.cls.id, date: l.date, start_time: l.start, duration_min: l.duration, location: l.cls.location, coach_ids: l.cls.coach_ids };
   const { data, error } = await supa.from('sessions').upsert(row, { onConflict: 'class_id,date' }).select().single();
   if (error) throw error;
   l.session = data;
@@ -308,10 +316,10 @@ function lessonDialog(l, att, me, done) {
 function classesDialog(classes, me, done) {
   const list = h('div.class-list', classes.length ? classes.map((c) => h('div.class-row',
     h('div', h('b', c.name), ' ', c.kind === 'ozel' ? h('span.chip.ozel', 'Özel ders') : null,
-      h('div.muted.small', [`${DAYS[c.weekday - 1]} ${hm(c.start_time)}–${endTime(c.start_time, c.duration_min)}`, placeText(c.location), coachShort(c.coach_ids), `${(c.class_members || []).length} öğrenci`].filter(Boolean).join(' · '))),
+      h('div.muted.small', [slotsText(c), placeText(c.location), coachShort(c.coach_ids), `${(c.class_members || []).length} öğrenci`].filter(Boolean).join(' · '))),
     h('button.btn.small', { onclick: () => { m.close(); classEditDialog(c, me, done); } }, 'Düzenle')))
     : h('div.muted', 'Henüz grup ya da özel ders yok.'));
-  const m = modal({ title: 'Gruplar ve özel dersler', wide: true, body: h('div', h('p.muted.small', 'Her satır her hafta aynı gün ve saatte tekrarlanan bir derstir. Grup dersinin adı, öğrencilerin "grup" bilgisi olarak da kullanılır (duyurular, sıralama, filtreler).'), list),
+  const m = modal({ title: 'Gruplar ve özel dersler', wide: true, body: h('div', h('p.muted.small', 'Her satır her hafta tekrarlanan bir grup ya da özel derstir; bir derse haftada birden çok gün/saat eklenebilir. Bir öğrenci birden çok gruba ve özel derse katılabilir. Grup dersinin adı duyurularda, sıralamada ve filtrelerde grup olarak kullanılır.'), list),
     actions: [{ label: 'Kapat' }, { label: '+ Yeni grup / özel ders', primary: true, onClick: () => { classEditDialog(null, me, done); } }] });
 }
 
@@ -335,9 +343,15 @@ async function classEditDialog(c, me, done) {
   const coaches = Object.values(meta.coaches);
   let kind = c ? c.kind : 'grup';
   const name = h('input', { value: c ? c.name : '', placeholder: 'Örn. Cumartesi 10:00 – Başlangıç' });
-  const day = h('select', DAYS.map((d, i) => h('option', { value: i + 1, selected: c ? c.weekday === i + 1 : i === 5 }, d)));
-  const time = h('input', { type: 'time', value: c ? hm(c.start_time) : '10:00' });
-  const dur = h('select', [45, 60, 75, 90, 120, 150, 180].map((m) => h('option', { value: m, selected: (c ? c.duration_min : 60) === m }, `${m} dk`)));
+  const slots = c ? slotsOf(c) : [{ wd: 6, start: '10:00', dur: 60 }];
+  const slotHost = h('div.slot-list');
+  const drawSlots = () => clear(slotHost).append(...slots.map((sl, i) => h('div.slot-row',
+    h('select', { onchange: (e) => { sl.wd = +e.target.value; } }, DAYS.map((d, k) => h('option', { value: k + 1, selected: sl.wd === k + 1 }, d))),
+    h('input', { type: 'time', value: sl.start, onchange: (e) => { sl.start = e.target.value; } }),
+    h('select', { onchange: (e) => { sl.dur = +e.target.value; } }, [45, 60, 75, 90, 120, 150, 180].map((m) => h('option', { value: m, selected: sl.dur === m }, `${m} dk`))),
+    slots.length > 1 ? h('button.icon-btn', { type: 'button', title: 'Bu saati kaldır', onclick: () => { slots.splice(i, 1); drawSlots(); } }, '✕') : h('span'))),
+    h('button.btn.small', { type: 'button', onclick: () => { const last = slots[slots.length - 1]; slots.push({ wd: last.wd % 7 + 1, start: last.start, dur: last.dur }); drawSlots(); } }, '+ Gün / saat ekle'));
+  drawSlots();
   const loc = h('input', { value: c ? c.location || '' : '', placeholder: 'Zoom / Meet bağlantısını yapıştır (ya da Online)' });
   const coachSet = new Set(c ? c.coach_ids : [me.id]);
   const memberSet = new Set(c ? (c.class_members || []).map((x) => x.student_id) : []);
@@ -348,15 +362,18 @@ async function classEditDialog(c, me, done) {
     const q = search.value.trim().toLocaleLowerCase('tr');
     clear(stList).append(...students.filter((s) => !q || s.display_name.toLocaleLowerCase('tr').includes(q)).map((s) => h('label.pick',
       h('input', { type: 'checkbox', checked: memberSet.has(s.id), onchange: (e) => { if (e.target.checked) memberSet.add(s.id); else memberSet.delete(s.id); } }),
-      h('span', s.display_name), h('span.muted.small', s.group_name ? ' · ' + s.group_name : ''))));
+      h('span', s.display_name), h('span.muted.small', s.label && s.label !== 'Grupsuz' ? ' · ' + s.label : ''))));
   };
   search.addEventListener('input', drawStudents); drawStudents();
   const attHost = h('div');
   if (c) attendanceSummary(c).then((el) => attHost.append(el)).catch(() => {});
   const save = async () => {
-    const row = { name: name.value.trim(), kind, weekday: +day.value, start_time: time.value, duration_min: +dur.value, location: loc.value.trim() || null, coach_ids: [...coachSet] };
+    if (slots.some((x) => !x.start)) { toast('Her gün için saat seçin', 'error'); return false; }
+    if (new Set(slots.map((x) => x.wd)).size !== slots.length) { toast('Aynı güne iki saat eklenemez; o gün için süreyi uzatın ya da ayrı bir ders açın', 'error'); return false; }
+    const sorted = slots.slice().sort((a, b) => a.wd - b.wd || a.start.localeCompare(b.start));
+    const row = { name: name.value.trim(), kind, weekday: sorted[0].wd, start_time: sorted[0].start, duration_min: sorted[0].dur,
+      slots: sorted.map((x) => ({ wd: x.wd, start: x.start, dur: x.dur })), location: loc.value.trim() || null, coach_ids: [...coachSet] };
     if (!row.name) { toast('Bir ad yazın', 'error'); return false; }
-    if (!row.start_time) { toast('Saat seçin', 'error'); return false; }
     (async () => {
       try {
         let id = c && c.id;
@@ -385,7 +402,8 @@ async function classEditDialog(c, me, done) {
   modal({ title: c ? c.name : 'Yeni grup / özel ders', wide: true, actions,
     body: h('div.form-col',
       field('Tür', kindSeg), field('Ad', name, 'Grup dersinde öğrencilerin grup adı olur. Özel derste örn. "Özel – Ali Yılmaz".'),
-      h('div.form-grid', field('Gün', day), field('Başlangıç', time), field('Süre', dur), field('Ders bağlantısı', loc)),
+      h('div.form-l', 'Haftalık gün ve saatler'), slotHost,
+      field('Ders bağlantısı', loc),
       coaches.length ? field('Hocaları', h('div.coach-pick', coaches.map((co) => h('label.chk', h('input', { type: 'checkbox', checked: coachSet.has(co.id), onchange: (e) => { if (e.target.checked) coachSet.add(co.id); else coachSet.delete(co.id); } }), ' ', co.display_name)))) : null,
       h('div.form-l', 'Öğrenciler'), search, stList, attHost) });
 }
@@ -416,7 +434,7 @@ function oneOffDialog(me, done) {
     body: h('div.form-col', field('Başlık', title), h('div.form-grid', field('Tarih', date), field('Saat', time), field('Süre', dur), field('Ders bağlantısı', loc)),
       h('label.chk', makeup, ' Telafi dersi'),
       coaches.length > 1 ? field('Hocaları', h('div.coach-pick', coaches.map((co) => h('label.chk', h('input', { type: 'checkbox', checked: coachSet.has(co.id), onchange: (e) => { if (e.target.checked) coachSet.add(co.id); else coachSet.delete(co.id); } }), ' ', co.display_name)))) : null,
-      h('div.form-l', 'Öğrenciler'), h('div.pick-list', students.map((s) => h('label.pick', h('input', { type: 'checkbox', onchange: (e) => { if (e.target.checked) memberSet.add(s.id); else memberSet.delete(s.id); } }), h('span', s.display_name), h('span.muted.small', s.group_name ? ' · ' + s.group_name : ''))))),
+      h('div.form-l', 'Öğrenciler'), h('div.pick-list', students.map((s) => h('label.pick', h('input', { type: 'checkbox', onchange: (e) => { if (e.target.checked) memberSet.add(s.id); else memberSet.delete(s.id); } }), h('span', s.display_name), h('span.muted.small', s.label && s.label !== 'Grupsuz' ? ' · ' + s.label : ''))))),
     actions: [{ label: 'Vazgeç' }, { label: 'Ekle', primary: true, onClick: () => {
       if (!date.value || !time.value) { toast('Tarih ve saat seçin', 'error'); return false; }
       supa.from('sessions').insert({ academy_id: me.coach_id || me.id, class_id: null, date: date.value, start_time: time.value, duration_min: +dur.value, title: title.value.trim() || null,

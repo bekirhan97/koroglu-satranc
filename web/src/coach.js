@@ -26,6 +26,14 @@ async function myStudents() {
   const { data, error } = await supa.from('profiles').select('id, username, display_name, group_name, lesson_type, created_at, leaderboard_ok, student_coaches!student_coaches_student_id_fkey(coach_id)').eq('role', 'student').order('display_name');
   if (error) throw error;
   for (const st of data) { st.coaches = (st.student_coaches || []).map((x) => x.coach_id); delete st.student_coaches; }
+  // memberships from the Program: a student can be in several groups and private lessons at once
+  const { data: cls } = await supa.from('classes').select('name, kind, class_members(student_id)');
+  for (const st of data) {
+    const mine = (cls || []).filter((c) => (c.class_members || []).some((m) => m.student_id === st.id));
+    st.groups = [...new Set([...mine.filter((c) => c.kind === 'grup').map((c) => c.name), ...(st.group_name ? [st.group_name] : [])])].sort((a, b) => a.localeCompare(b, 'tr'));
+    st.hasOzel = st.lesson_type === 'ozel' || mine.some((c) => c.kind === 'ozel');
+    st.label = classOf(st);
+  }
   meta.students = Object.fromEntries(data.map((st) => [st.id, st]));
   return data;
 }
@@ -37,7 +45,10 @@ async function myCoaches() {
 }
 
 // "Özel ders" / grup adı: lists are grouped and filtered by this.
-export const classOf = (st) => st.lesson_type === 'ozel' ? 'Özel ders' + (st.group_name ? ' · ' + st.group_name : '') : (st.group_name || 'Grupsuz');
+export const groupsOf = (st) => (st && st.groups) || (st && st.group_name ? [st.group_name] : []);
+const hasOzel = (st) => !!st && (st.hasOzel || st.lesson_type === 'ozel');
+export const classOf = (st) => [...groupsOf(st), ...(hasOzel(st) ? ['Özel ders'] : [])].join(' · ') || 'Grupsuz';
+export const allGroups = (list) => [...new Set(list.flatMap(groupsOf))].sort((a, b) => a.localeCompare(b, 'tr'));
 const coachNames = (ids) => (ids || []).map((id) => (meta.coaches[id] ? meta.coaches[id].display_name.split(' ')[0] : '?')).join(', ');
 
 // Filter: all | mine | ozel | g:<group>
@@ -45,12 +56,12 @@ let filterValue = 'all';
 export function filterTest(st, value = filterValue) {
   if (!st) return value === 'all';
   if (value === 'mine') return (st.coaches || []).includes(meta.me);
-  if (value === 'ozel') return st.lesson_type === 'ozel';
-  if (value.startsWith('g:')) return st.group_name === value.slice(2) && st.lesson_type !== 'ozel';
+  if (value === 'ozel') return hasOzel(st);
+  if (value.startsWith('g:')) return groupsOf(st).includes(value.slice(2));
   return true;
 }
 export function filterSelect(list, onChange) {
-  const groups = [...new Set(list.filter((x) => x.lesson_type !== 'ozel').map((x) => x.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+  const groups = allGroups(list);
   if (filterValue.startsWith('g:') && !groups.includes(filterValue.slice(2))) filterValue = 'all';
   return h('select.filter-sel', { onchange: (e) => { filterValue = e.target.value; onChange(); } },
     [['all', 'Bütün öğrenciler'], ['mine', 'Benim öğrencilerim'], ['ozel', 'Özel ders'], ...groups.map((g) => ['g:' + g, 'Grup: ' + g])]
@@ -77,7 +88,7 @@ export function accountsHooks(me) {
       try { [all, coaches] = await Promise.all([myStudents(), myCoaches()]); } catch (e) { clear(body).append(h('div.empty', 'Öğrenciler alınamadı: ' + e.message)); return; }
       const list = all.filter((x) => filterTest(x)).sort((a, b) => classOf(a).localeCompare(classOf(b), 'tr') || a.display_name.localeCompare(b.display_name, 'tr'));
       const lastReport = Object.fromEntries(Object.values(students.map).map((s) => [s.id, s.last && s.last.createdAt]));
-      const groups = [...new Set(all.map((s) => s.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+      const groups = allGroups(all);
       const redraw = () => this.accountsTab(body, { onChange });
       clear(body).append(h('div.sets-page',
         h('div.toolbar',
@@ -89,7 +100,7 @@ export function accountsHooks(me) {
           h('tbody', list.map((s) => h('tr',
             h('td', h('b', s.display_name), h('div.sub', `açıldı ${fmtDate(s.created_at)}`)),
             h('td', '@' + s.username),
-            h('td', h('span.chip' + (s.lesson_type === 'ozel' ? '.ozel' : ''), classOf(s))),
+            h('td', h('span.chip' + (hasOzel(s) && !groupsOf(s).length ? '.ozel' : ''), classOf(s))),
             h('td', coachNames(s.coaches) || h('span.muted', '–')),
             h('td', lastReport[s.id] ? fmtDate(lastReport[s.id]) : h('span.muted', 'henüz yok')),
             h('td', h('input', { type: 'checkbox', checked: !!s.leaderboard_ok, title: 'Veli sıralama onayı verdi', onchange: async (e) => {
@@ -124,7 +135,7 @@ export function accountsHooks(me) {
           const st = byId[t.student_id];
           const rep = students.map[t.student_id] && students.map[t.student_id].last;
           const pr = rep && rep.assignments ? rep.assignments.find((x) => x.id === a.id) : null;
-          return { name: st ? st.display_name : 'Silinmiş öğrenci', group: st && st.group_name, pr, seen: !!pr };
+          return { name: st ? st.display_name : 'Silinmiş öğrenci', group: st && classOf(st), pr, seen: !!pr };
         }).sort((x, y) => (y.pr ? y.pr.pct : -1) - (x.pr ? x.pr.pct : -1) || x.name.localeCompare(y.name, 'tr'));
         const done = rows.filter((r) => r.pr && r.pr.pct >= 1).length;
         const half = rows.filter((r) => r.pr && r.pr.pct > 0 && r.pr.pct < 1).length;
@@ -158,7 +169,7 @@ export function accountsHooks(me) {
     async announcementsTab(body) {
       const all = await myStudents().catch(() => []);
       const list = isHead ? all : all.filter((x) => (x.coaches || []).includes(me.id));
-      const groups = [...new Set(list.map((s) => s.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+      const groups = allGroups(list);
       const { data: anns } = await supa.from('announcements').select('*').eq('coach_id', me.id).order('created_at', { ascending: false });
       const text = h('textarea.paste', { rows: 3, maxlength: 1000, placeholder: 'Örn. Bu cumartesi ders yok. Pazar 14:00\'te Lichess takım turnuvası var!' });
       const everyone = isHead ? 'Bütün öğrenciler' : `Benim öğrencilerim (${list.length})`;
@@ -178,7 +189,7 @@ export function accountsHooks(me) {
               if (error) toast('Gönderilemedi: ' + error.message, 'error'); else {
                 toast('Duyuru gönderildi', 'ok');
                 const isHead = !meta.coaches[meta.me] || !meta.coaches[meta.me].coach_id;
-                notify(Object.values(meta.students).filter((st) => (isHead || (st.coaches || []).includes(meta.me)) && (!grp.value || st.group_name === grp.value)).map((st) => st.id), '📣 Duyuru', t, '#home', 'duyuru');
+                notify(Object.values(meta.students).filter((st) => (isHead || (st.coaches || []).includes(meta.me)) && (!grp.value || groupsOf(st).includes(grp.value))).map((st) => st.id), '📣 Duyuru', t, '#home', 'duyuru');
                 redraw();
               }
             } }, 'Duyur'))),
@@ -194,7 +205,7 @@ export function accountsHooks(me) {
     // ---------- "Sıralama" ----------
     async leaderboardTab(body) {
       const all = await myStudents().catch(() => []);
-      const groups = [...new Set(all.map((x) => x.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+      const groups = allGroups(all);
       clear(body).append(h('div.sets-page', rankingView({ isCoach: true, groups })));
     },
 
@@ -227,7 +238,7 @@ export function accountsHooks(me) {
       try { list = await myStudents(); } catch (e) { toast('Öğrenciler alınamadı: ' + e.message, 'error'); return false; }
       if (!list.length) { toast('Önce "Hesaplar" sekmesinden öğrenci hesabı açın.', 'error'); return false; }
       const chosen = new Set((preselect || []).filter((id) => list.some((s) => s.id === id)));
-      const groups = [...new Set(list.map((s) => s.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+      const groups = allGroups(list);
       const boxes = new Map();
       const count = h('b', '0');
       const sync = () => { for (const [id, cb] of boxes) cb.checked = chosen.has(id); count.textContent = chosen.size; };
@@ -236,8 +247,8 @@ export function accountsHooks(me) {
         h('div.btn-row',
           h('button.btn.small', { onclick: () => { list.forEach((s) => chosen.add(s.id)); sync(); } }, 'Hepsi'),
           h('button.btn.small', { onclick: () => { list.filter((s) => filterTest(s, 'mine')).forEach((s) => chosen.add(s.id)); sync(); } }, 'Benim öğrencilerim'),
-          list.some((s) => s.lesson_type === 'ozel') ? h('button.btn.small', { onclick: () => { list.filter((s) => s.lesson_type === 'ozel').forEach((s) => chosen.add(s.id)); sync(); } }, 'Özel ders') : null,
-          groups.map((g) => h('button.btn.small', { onclick: () => { list.filter((s) => s.group_name === g && s.lesson_type !== 'ozel').forEach((s) => chosen.add(s.id)); sync(); } }, g)),
+          list.some(hasOzel) ? h('button.btn.small', { onclick: () => { list.filter(hasOzel).forEach((s) => chosen.add(s.id)); sync(); } }, 'Özel ders') : null,
+          groups.map((g) => h('button.btn.small', { onclick: () => { list.filter((s) => groupsOf(s).includes(g)).forEach((s) => chosen.add(s.id)); sync(); } }, g)),
           h('button.btn.small.ghost', { onclick: () => { chosen.clear(); sync(); } }, 'Temizle')),
         h('div.pick-list', list.map((s) => {
           const cb = h('input', { type: 'checkbox', onchange: (e) => { if (e.target.checked) chosen.add(s.id); else chosen.delete(s.id); sync(); } });
