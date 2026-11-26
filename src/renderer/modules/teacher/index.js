@@ -1,3 +1,4 @@
+import { CHAPTERS as EG_CHAPTERS, LESSONS as EG_LESSONS, GOAL_TEXT as EG_GOAL } from '../endgame/curriculum.js';
 // "Öğretmen" (teacher mode only): students' progress reports and preparing assignment packages.
 import { h, clear, modal, toast, fmtDate } from '../../core/dom.js';
 import { store } from '../../core/store.js';
@@ -132,6 +133,13 @@ export default {
             h('span', { style: { height: `${dayTotal(d) ? 8 + (92 * dayTotal(d)) / maxDay : 0}%` } }), h('i', d.key.slice(8))))),
           goal ? h('div.muted.small', 'Günlük hedef: ' + GOAL_KINDS.filter(([k]) => goal[k] > 0).map(([k, unit]) => `${goal[k]} ${unit}`).join(', ') + (goal.from === 'self' ? ' (öğrencinin kendi hedefi)' : '')) : null),
         r.lichess && r.lichess.username ? lichessPanel(r.lichess) : null,
+        r.endgame && Object.keys(r.endgame).length ? h('div.panel', h('div.panel-title', `Oyunsonu (${EG_LESSONS.filter((l) => r.endgame[l.id]).length}/${EG_LESSONS.length} ders)`),
+          h('div.eg-report', EG_CHAPTERS.map(([ch, name]) => {
+            const ls = EG_LESSONS.filter((l) => l.ch === ch);
+            const d = ls.filter((l) => r.endgame[l.id]);
+            return h('div', h('b', name), h('span.muted.small', ` ${d.length}/${ls.length} · ${d.reduce((x, l) => x + (r.endgame[l.id].stars || 0), 0)} ★`),
+              d.length ? h('div.muted.small', d.map((l) => `${l.title} ${'★'.repeat(r.endgame[l.id].stars || 0)}`).join(', ')) : null);
+          }))) : null,
         r.badges && Object.keys(r.badges).length ? h('div.panel', h('div.panel-title', `Rozetler (${Object.keys(r.badges).length}/${BADGES.length})`),
           h('div.badge-row', BADGES.filter((b) => r.badges[b.id]).map((b) => h('span.badge-chip', { title: `${b.desc} · ${fmtDate(r.badges[b.id])}` }, b.icon, ' ', b.name)))) : null,
         r.exams && Object.values(r.exams).some((e) => e.finishedAt) ? h('div.panel', h('div.panel-title', 'Sınavlar'),
@@ -202,7 +210,7 @@ export default {
     function showPackage() {
       setTabs('package');
       const f = { title: '', note: '', due: '', goal: { puzzles: 10, openings: 0, gtmGames: 0, playGames: 0 }, games: new Set(), sets: new Set(), reps: new Set(), themeSets: [], links: [],
-        videos: new Set(), exam: { on: false, title: '', minutes: 30, pz: { mode: 'theme', theme: '', count: 10, min: 900, max: 1600, setId: '' }, gtmGameId: '', repId: '', openingCount: 10 } };
+        videos: new Set(), endgames: new Set(), exam: { on: false, title: '', minutes: 30, pz: { mode: 'theme', theme: '', count: 10, min: 900, max: 1600, setId: '' }, gtmGameId: '', repId: '', openingCount: 10 } };
       const summary = h('div.pkg-summary');
       const refresh = () => {
         const nGames = f.games.size;
@@ -211,8 +219,9 @@ export default {
           h('ul', nGames ? h('li', `${nGames} Tahmin Et oyunu`) : null, nPz ? h('li', `${nPz} bulmaca`) : null, f.reps.size ? h('li', `${f.reps.size} açılış repertuvarı`) : null,
             f.links.length ? h('li', `${f.links.length} Lichess bağlantısı`) : null,
             f.videos.size ? h('li', `${f.videos.size} video`) : null,
+            f.endgames.size ? h('li', `${f.endgames.size} oyunsonu dersi`) : null,
             f.exam.on ? h('li', `Sınav (${f.exam.minutes} dk)`) : null,
-            !nGames && !nPz && !f.reps.size && !f.links.length && !f.videos.size ? h('li.muted', 'Henüz içerik seçilmedi') : null),
+            !nGames && !nPz && !f.reps.size && !f.links.length && !f.videos.size && !f.endgames.size ? h('li.muted', 'Henüz içerik seçilmedi') : null),
           h('button.btn.primary.big', { onclick: save }, api.web ? 'Öğrencilere gönder…' : 'Paketi kaydet…'),
           h('p.muted.small', api.web ? 'Sonraki adımda ödevin hangi öğrencilere (ya da gruplara) gideceğini seçersiniz. Öğrenci siteye girdiğinde ödevi Ana Sayfa\'da görür.' : 'Kaydettiğiniz .kpaket dosyasını öğrencilerinize WhatsApp, e-posta ya da USB ile gönderin. Öğrenci dosyaya çift tıklayınca ödev uygulamasına eklenir.'));
       };
@@ -279,17 +288,28 @@ export default {
           list.length ? h('div.pick-list', list.map((v) => check(f.videos, v.id, v.title, v.topic || ''))) : h('div.muted.small', 'Kütüphanenizde video yok (Videolar → + Video ekle).'));
       }).catch(() => {});
 
+      // endgame lessons (web only): ready-made curriculum + the academy's own positions
+      let egCustom = [];
+      const egPanel = h('div.panel', h('div.panel-title', 'Oyunsonu'));
+      const drawEg = () => clear(egPanel).append(h('div.panel-title', 'Oyunsonu'),
+        h('p.muted.small', 'Öğrenci her dersi kusursuz savunan bilgisayara karşı oynar; hedefe ulaşınca geçer (1–3 yıldız).'),
+        ...EG_CHAPTERS.map(([ch, name]) => h('details.eg-pick', h('summary', name, h('span.muted.small', ` (${EG_LESSONS.filter((l) => l.ch === ch && f.endgames.has(l.id)).length}/${EG_LESSONS.filter((l) => l.ch === ch).length})`)),
+          h('div.pick-list', EG_LESSONS.filter((l) => l.ch === ch).map((l) => check(f.endgames, l.id, l.title, EG_GOAL[l.goal].split(' (')[0]))))),
+        egCustom.length ? h('details.eg-pick', h('summary', 'Hocaların konumları'), h('div.pick-list', egCustom.map((l) => check(f.endgames, l.id, l.title, EG_GOAL[l.goal].split(' (')[0])))) : null);
+      drawEg();
+      if (window.endgameHooks) window.endgameHooks.list().then((rows) => { egCustom = rows.map((x) => ({ id: 'c-' + x.id, title: x.title, fen: x.fen, goal: x.goal, text: x.note || '' })); drawEg(); }).catch(() => {});
+
       const num = (k) => h('input.goal-in', { type: 'number', min: 0, max: 200, value: f.goal[k], onchange: (e) => { f.goal[k] = Math.max(0, +e.target.value || 0); } });
 
       async function save() {
         const title = f.title.trim();
         if (!title) { toast('Pakete bir başlık verin', 'error'); return; }
         if (f.links.some((l) => !isLichessUrl(l.url))) { toast('Lichess bağlantıları https://lichess.org/ ile başlamalı', 'error'); return; }
-        if (!f.games.size && !f.sets.size && !f.themeSets.length && !f.reps.size && !f.links.length && !f.videos.size && !f.exam.on) { toast('Pakete en az bir içerik ekleyin', 'error'); return; }
+        if (!f.games.size && !f.sets.size && !f.themeSets.length && !f.reps.size && !f.links.length && !f.videos.size && !f.endgames.size && !f.exam.on) { toast('Pakete en az bir içerik ekleyin', 'error'); return; }
         const due = f.due ? new Date(f.due + 'T23:59:59').getTime() : null;
         const goal = Object.values(f.goal).some((v) => v > 0) ? { ...f.goal } : null;
         toast('Paket hazırlanıyor…');
-        const pkg = await buildPackage({ title, note: f.note.trim(), due, goal, gtmGameIds: [...f.games], setIds: [...f.sets], themeSets: f.themeSets, repIds: [...f.reps], links: f.links, videos: videoList.filter((v) => f.videos.has(v.id)).map((v) => ({ id: v.id, title: v.title, youtubeId: v.youtube_id })), exam: f.exam.on ? {
+        const pkg = await buildPackage({ title, note: f.note.trim(), due, goal, gtmGameIds: [...f.games], setIds: [...f.sets], themeSets: f.themeSets, repIds: [...f.reps], links: f.links, videos: videoList.filter((v) => f.videos.has(v.id)).map((v) => ({ id: v.id, title: v.title, youtubeId: v.youtube_id })), endgames: [...EG_LESSONS, ...egCustom].filter((l) => f.endgames.has(l.id)), exam: f.exam.on ? {
           title: f.exam.title.trim() || `${title} sınavı`, minutes: f.exam.minutes,
           puzzles: f.exam.pz.mode === 'set' ? (f.exam.pz.setId ? { setId: f.exam.pz.setId, count: f.exam.pz.count } : null) : (f.exam.pz.count > 0 ? { theme: f.exam.pz.theme, count: f.exam.pz.count, min: f.exam.pz.min, max: f.exam.pz.max } : null),
           gtmGameId: f.exam.gtmGameId, repId: f.exam.repId, openingCount: f.exam.openingCount } : null });
@@ -337,6 +357,7 @@ export default {
             linkRows,
             h('button.btn.small', { onclick: () => { f.links.push({ title: 'Hafta sonu turnuvası', url: '' }); drawLinks(); refresh(); } }, '+ Bağlantı ekle')),
           window.webHooks ? videosPanel : null,
+          window.webHooks ? egPanel : null,
           examPanel()),
         h('div.pkg-side', h('div.panel', summary),
           sentPackages.list.length ? h('div.panel', h('div.panel-title', 'Gönderilen paketler'),

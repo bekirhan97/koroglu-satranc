@@ -25,6 +25,9 @@ import { loadOpenings } from '../../src/renderer/core/openings.js';
 import { startErrorLog, recentErrors } from './errlog.js';
 import { coachAlerts } from './alerts.js';
 import { studyTab } from './study.js';
+import endgame from '../../src/renderer/modules/endgame/index.js';
+import { endgameHooks } from './endgame-web.js';
+import { lessonById } from '../../src/renderer/modules/endgame/curriculum.js';
 import { pushState, enablePush, disablePush, forgetDevice } from './push.js';
 import { startLink, finishLink, getLink, unlink, lichessSummary, ensureRegistered, playToken, forgetPlay } from './lichess.js';
 import teacher from '../../src/renderer/modules/teacher/index.js';
@@ -39,7 +42,7 @@ let mounted = null;
 let activeId = 'home';
 teacher.title = 'Antrenör';
 lichessPlay.short = 'Lichess'; gtm.short = 'Tahmin Et'; openings.short = 'Açılış'; play.short = 'Oyna'; puzzles.short = 'Bulmaca';
-const MODULES = [schedule, videos, puzzles, gtm, openings, play, lichessPlay, ranking, teacher];
+const MODULES = [schedule, videos, puzzles, endgame, gtm, openings, play, lichessPlay, ranking, teacher];
 const visibleModules = () => MODULES.filter((m) => !m.teacherOnly || (me && me.role === 'coach'));
 
 // ---------- login ----------
@@ -131,6 +134,7 @@ async function start() {
   await Promise.all([pdata.load(), activity.load(), assignments.load()]);
   window.webHooks = me.role === 'coach' ? accountsHooks(me) : null;
   if (window.webHooks) window.webHooks.studyTab = studyTab;
+  window.endgameHooks = endgameHooks(me);
   loadOpenings().catch(() => {});
   const lr = await finishLink();
   if (lr && lr.error) toast(lr.error, 'error');
@@ -231,6 +235,19 @@ function go(id) {
   if (id.startsWith('videos:')) {
     activeId = 'videos'; layout(content);
     videos.mount(content, { go, open: id.slice(7) }).then((r) => { mounted = r; });
+    return;
+  }
+  if (id.startsWith('puzzles:theme:')) {
+    activeId = 'puzzles'; layout(content);
+    mounted = puzzles.mount(content, { go, theme: id.slice(14) });
+    return;
+  }
+  if (id.startsWith('egasg:')) {
+    // an assignment's endgame lessons
+    const a = assignments.list.find((x) => x.id === id.slice(6));
+    if (!a) return renderHome(content);
+    activeId = 'oyunsonu'; layout(content);
+    mounted = endgame.mount(content, { go, lessons: a.endgames || [], onDone: () => go('home') });
     return;
   }
   if (id.startsWith('asg:')) {
@@ -339,7 +356,7 @@ function setsLeft(a) {
 }
 function partTarget(a, x) {
   return x.kind === 'sets' ? 'asg:' + a.id : x.kind === 'gtm' ? 'gtm' : x.kind === 'reps' ? 'openings'
-    : x.kind === 'videos' ? (a.videos.length === 1 ? 'videos:' + a.videos[0].id : 'videos') : x.kind === 'exam' ? 'exam:' + a.id : 'home';
+    : x.kind === 'videos' ? (a.videos.length === 1 ? 'videos:' + a.videos[0].id : 'videos') : x.kind === 'exam' ? 'exam:' + a.id : x.kind === 'endgames' ? 'egasg:' + a.id : 'home';
 }
 const DAYS = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 

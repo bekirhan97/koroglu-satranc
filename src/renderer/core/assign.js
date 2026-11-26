@@ -45,7 +45,7 @@ export const assignments = {
  */
 export const isLichessUrl = (u) => /^https:\/\/lichess\.org\/[\w\-/#?=&.]+$/.test(String(u || '').trim());
 
-export async function buildPackage({ title, note = '', due = null, goal = null, gtmGameIds = [], setIds = [], themeSets = [], repIds = [], links = [], exam = null, videos = [] }) {
+export async function buildPackage({ title, note = '', due = null, goal = null, gtmGameIds = [], setIds = [], themeSets = [], repIds = [], links = [], exam = null, videos = [], endgames = [] }) {
   const games = store.games.filter((g) => gtmGameIds.includes(g.id));
   const analysis = {};
   for (const g of games) { const a = await store.loadAnalysis(g.id); if (a && Object.keys(a.plies || {}).length) analysis[g.id] = a; }
@@ -103,6 +103,7 @@ export async function buildPackage({ title, note = '', due = null, goal = null, 
     links: links.filter((l) => isLichessUrl(l.url)).map((l) => ({ title: String(l.title || 'Lichess turnuvası').slice(0, 80), url: l.url.trim() })),
     exam: examObj,
     videos: videos.filter((v) => /^[A-Za-z0-9_-]{11}$/.test(v.youtubeId)).map((v) => ({ id: v.id, title: String(v.title).slice(0, 160), youtubeId: v.youtubeId })),
+    endgames: endgames.slice(0, 60).map((l) => ({ id: l.id, title: String(l.title).slice(0, 120), fen: l.fen, goal: l.goal, text: String(l.text || '').slice(0, 600), oppFirst: !!l.oppFirst })),
   };
 }
 
@@ -114,6 +115,7 @@ export function packageSummary(pkg) {
   if (pkg.reps && pkg.reps.length) parts.push(`${pkg.reps.length} açılış repertuvarı`);
   if (pkg.links && pkg.links.length) parts.push(`${pkg.links.length} Lichess bağlantısı`);
   if (pkg.videos && pkg.videos.length) parts.push(`${pkg.videos.length} video`);
+  if (pkg.endgames && pkg.endgames.length) parts.push(`${pkg.endgames.length} oyunsonu dersi`);
   if (pkg.exam) parts.push(`Sınav: ${pkg.exam.title || 'sınav'}`);
   return parts;
 }
@@ -161,7 +163,7 @@ export async function importPackage(pkg) {
   if (items.reps.length) await odata.saveIndex();
 
   const links = (pkg.links || []).filter((l) => isLichessUrl(l.url));
-  assignments.list.push({ id: pkg.id, title: pkg.title, teacher: pkg.teacher, note: pkg.note || '', due: pkg.due || null, goal: pkg.goal || null, createdAt: pkg.createdAt, receivedAt: Date.now(), items, links, exam: pkg.exam || null, videos: pkg.videos || [] });
+  assignments.list.push({ id: pkg.id, title: pkg.title, teacher: pkg.teacher, note: pkg.note || '', due: pkg.due || null, goal: pkg.goal || null, createdAt: pkg.createdAt, receivedAt: Date.now(), items, links, exam: pkg.exam || null, videos: pkg.videos || [], endgames: pkg.endgames || [] });
   await assignments.save();
   return { duplicate: false, items };
 }
@@ -219,6 +221,10 @@ export async function assignmentProgress(a) {
       done += s.learned; total += s.total;
     }
     parts.push({ kind: 'reps', label: 'açılış pozisyonu', done, total });
+  }
+  if (a.endgames && a.endgames.length) {
+    const eg = (await api.read('endgame', {})).lessons || {};
+    parts.push({ kind: 'endgames', label: 'oyunsonu', done: a.endgames.filter((l) => eg[l.id]).length, total: a.endgames.length });
   }
   if (a.videos && a.videos.length) {
     const watched = await api.read('videos/watched', {});
@@ -293,6 +299,7 @@ export async function buildReport() {
     badges: await api.read('badges', {}),
     exams: await api.read('exams', {}),
     videos: await api.read('videos/watched', {}),
+    endgame: (await api.read('endgame', {})).lessons || {},
   };
 }
 

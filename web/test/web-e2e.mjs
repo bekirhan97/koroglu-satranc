@@ -1,5 +1,6 @@
 // Çalıştırma: cd web/dist && python3 -m http.server 8765 &  ;  node web/test/web-e2e.mjs  (sahte Supabase ve sahte Lichess ile)
 // End-to-end test of the web student system against the real Supabase project (temporary test accounts).
+import { Chess as ChessJs } from 'chess.js';
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import { createMock } from './mock-supa.mjs';
@@ -15,6 +16,15 @@ const errors = [];
 async function newPage(viewport = { width: 1280, height: 820 }) {
   const ctx = await browser.newContext({ viewport });
   if (MOCK) await MOCK.attach(ctx);
+  // fake endgame tablebase: whoever still has a queen/rook/pawn wins, else draw (enough to test the flow)
+  await ctx.route('https://tablebase.lichess.ovh/**', (route) => {
+    const fen = decodeURIComponent(new globalThis.URL(route.request().url()).searchParams.get('fen'));
+    const cat = (f) => { const b = f.split(' ')[0], t = f.split(' ')[1]; const w = /[QRP]/.test(b), k = /[qrp]/.test(b); const r = w && !k ? 'w' : k && !w ? 'b' : null; return !r ? 'draw' : r === t ? 'win' : 'loss'; };
+    const c = new ChessJs(fen);
+    const order = { loss: 0, draw: 1, win: 2 };
+    const moves = c.moves({ verbose: true }).map((m) => { const d = new ChessJs(fen); d.move(m); return { uci: m.from + m.to + (m.promotion || ''), san: m.san, category: d.isCheckmate() ? 'loss' : d.isStalemate() ? 'draw' : cat(d.fen()), dtm: 9 }; }).sort((a, b) => order[a.category] - order[b.category]);
+    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ category: cat(fen), dtm: 9, moves }) });
+  });
   // fake Lichess (OAuth + public API) so the linking flow can be tested offline
   await ctx.route('https://lichess.org/**', (route) => {
     const u = new globalThis.URL(route.request().url());
@@ -467,6 +477,42 @@ await c.click('.study-bar .seg button:has-text("Grup grup")'); await c.waitForTi
 console.log('  grup görünümü:', (await c.locator('.study-table tbody').textContent()).replace(/\s+/g, ' ').slice(0, 200));
 await shot(c, '38-calisma-raporu-grup');
 const dl = c.waitForEvent('download'); await c.click('.study-bar button:has-text("Excel")'); console.log('  csv:', (await dl).suggestedFilename());
+
+step('oyunsonu');
+const e = await newPage();
+await e.goto(URL); await e.waitForTimeout(1500);
+await e.fill('input[placeholder="Kullanıcı adı"]', studentUser); await e.fill('input[placeholder="Şifre"]', studentPass);
+await e.click('button:has-text("Giriş yap")'); await e.waitForSelector('.home', { timeout: 20000 }); await e.waitForTimeout(1500);
+await nav(e, 'Oyunsonu'); await e.waitForTimeout(1500);
+console.log('  ders kartları:', await e.locator('.eg-card').count(), '· bölümler:', await e.locator('.eg-chapter').count());
+await shot(e, '40-oyunsonu');
+await e.click('.eg-card:has-text("Pata dikkat")'); await e.waitForTimeout(2000);
+await shot(e, '41-oyunsonu-ders');
+await play(e, 'h2c7', true); await e.waitForTimeout(800);
+console.log('  pat denemesi:', await e.locator('.eg-status').textContent());
+await e.waitForTimeout(2000);
+await play(e, 'h2h8', true); await e.waitForTimeout(1500);
+console.log('  mat:', await e.locator('.eg-status').textContent());
+await shot(e, '42-oyunsonu-bitti');
+await e.click('button:has-text("Sonraki")'); await e.waitForTimeout(2000);
+await e.click('button:has-text("İpucu")'); await e.waitForTimeout(1000);
+console.log('  ipucu:', await e.locator('.eg-status').textContent(), '· sonraki ders:', await e.locator('.eg-head h3').textContent());
+await e.click('button:has-text("Derslere dön")'); await e.waitForTimeout(1000);
+console.log('  ilerleme:', await e.locator('.eg-summary').textContent());
+await e.click('.tab:has-text("Bulmacalar")'); await e.waitForTimeout(500);
+await e.click('.theme-card:has-text("Kale oyunsonu")'); await e.waitForTimeout(4000);
+console.log('  kale oyunsonu bulmacası:', await e.locator('.pz-bar select').first().inputValue().catch(() => 'yok'));
+await e.context().close();
+step('antrenör: oyunsonu konumu + ödev bölümü');
+await nav(c, 'Oyunsonu'); await c.waitForTimeout(1000);
+await c.click('.tab:has-text("Hocanın konumları")'); await c.waitForTimeout(1000);
+await c.click('button:has-text("+ Konum ekle")'); await c.waitForTimeout(800);
+await c.fill('.modal input.big-input', 'Kale oyunsonu – deneme');
+await c.fill('.modal .fen-input', '8/8/8/3k4/8/8/4PK2/7R w - - 0 1'); await c.press('.modal .fen-input', 'Enter');
+await c.click('.modal button:has-text("Kaydet")'); await c.waitForTimeout(1500);
+console.log('  konum kaydedildi:', MOCK.db.endgame_positions.length, '· kart:', await c.locator('.eg-card').count());
+await nav(c, 'Antrenör'); await c.waitForTimeout(1000); await c.click('.tab:has-text("Ödev ver")'); await c.waitForTimeout(1500);
+console.log('  ödevde oyunsonu paneli:', (await c.locator('.panel:has(.panel-title:text-is("Oyunsonu"))').textContent().catch(() => 'yok')).replace(/\s+/g, ' ').slice(0, 160));
 
 step('bildirim tetikleri');
 const kinds = MOCK.pushes.filter((b) => b.action === 'gonder').map((b) => b.title + ' → ' + b.ids.length);

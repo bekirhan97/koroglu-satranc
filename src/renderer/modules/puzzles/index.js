@@ -252,6 +252,7 @@ export default {
               h('td', x.rated ? (x.d >= 0 ? '+' : '') + x.d : '')))) : h('div.muted', 'Henüz bulmaca çözülmedi.')))));
     }
 
+    if (opts.theme) state.theme = opts.theme;
     // Opened from an assignment: go straight to the first set with puzzles left (resumes where the student stopped).
     const want = (opts.openSets || []).map((id) => pdata.sets.find((x) => x.id === id)).filter(Boolean);
     const open = want.find((st) => { const pr = pdata.progress[st.id] || {}; return st.puzzles.some((q) => !pr[q.id]); });
