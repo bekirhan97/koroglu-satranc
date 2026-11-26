@@ -552,6 +552,9 @@ console.log('  Şükrü etiketi:', (await c.locator('table.accounts tbody tr', {
 await c.selectOption('.filter-sel >> nth=0', 'g:Salı-Perşembe 18:00'); await c.waitForTimeout(500);
 console.log('  "Salı-Perşembe" filtresi:', await c.locator('table.accounts tbody tr').count());
 await c.selectOption('.filter-sel >> nth=0', 'all'); await c.waitForTimeout(300);
+step('ikinci antrenör programda yalnızca kendi derslerini görür');
+await c2.click('.nav-item:has-text("Program")'); await c2.waitForTimeout(2000);
+console.log('  2. antrenör program:', await c2.locator('.lesson').count(), 'ders · seçici:', await c2.locator('.schedule .filter-sel').count(), '· başlık:', (await c2.locator('.schedule .toolbar').textContent()).includes('Derslerim'));
 step('bildirim tetikleri');
 const kinds = MOCK.pushes.filter((b) => b.action === 'gonder').map((b) => b.title + ' → ' + b.ids.length);
 console.log('  gönderilen bildirimler:', kinds.join(' | '));

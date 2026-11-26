@@ -95,12 +95,15 @@ export default {
 // ======================= coach =======================
 async function coachView(body, me) {
   let week = mondayOf(new Date());
-  let mine = false;
+  // only the academy owner sees the whole programme; every other coach sees just the lessons they teach
+  const isHead = !me.coach_id;
+  let mine = !isHead;
   await Promise.all([academyStudents().catch(() => []), academyCoaches().catch(() => [])]);
   async function draw() {
     clear(body).append(h('div.empty', 'Yükleniyor…'));
     let data;
     try { data = await loadAll(week, addDays(week, 6)); } catch (e) { clear(body).append(h('div.empty', 'Program alınamadı: ' + e.message)); return; }
+    if (!isHead) { data.classes = data.classes.filter((c) => (c.coach_ids || []).includes(me.id)); data.sessions = data.sessions.filter((s) => s.class_id ? data.classes.some((c) => c.id === s.class_id) : (s.coach_ids || []).includes(me.id)); }
     let lessons = expandLessons(data.classes, data.sessions, week, 7);
     if (mine) lessons = lessons.filter((l) => (l.coach_ids || []).includes(me.id));
     const attOf = (l) => (l.session ? data.attendance.filter((a) => a.session_id === l.session.id) : []);
@@ -122,7 +125,7 @@ async function coachView(body, me) {
         h('b', `${fmtDay(week)} – ${fmtDay(addDays(week, 6))} ${addDays(week, 6).getFullYear()}`),
         h('button.btn.small', { onclick: () => { week = addDays(week, 7); draw(); } }, '▸'),
         h('button.btn.small.ghost', { onclick: () => { week = mondayOf(new Date()); draw(); } }, 'Bu hafta'),
-        h('select.filter-sel', { onchange: (e) => { mine = e.target.value === 'mine'; draw(); } }, h('option', { value: 'all', selected: !mine }, 'Bütün akademi'), h('option', { value: 'mine', selected: mine }, 'Benim derslerim')),
+        isHead ? h('select.filter-sel', { onchange: (e) => { mine = e.target.value === 'mine'; draw(); } }, h('option', { value: 'all', selected: !mine }, 'Bütün akademi'), h('option', { value: 'mine', selected: mine }, 'Benim derslerim')) : h('span.muted.small', 'Derslerim'),
         h('span.spacer'),
         h('button.btn', { onclick: () => classesDialog(data.classes, me, draw) }, 'Gruplar ve özel dersler'),
         h('button.btn.primary', { onclick: () => oneOffDialog(me, draw) }, '+ Tek seferlik ders')),

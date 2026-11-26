@@ -38,7 +38,7 @@ async function myStudents() {
   return data;
 }
 async function myCoaches() {
-  const { data, error } = await supa.from('profiles').select('id, username, display_name, coach_id, created_at').eq('role', 'coach').order('display_name');
+  const { data, error } = await supa.from('profiles').select('id, username, display_name, coach_id, created_at, title').eq('role', 'coach').order('display_name');
   if (error) throw error;
   meta.coaches = Object.fromEntries(data.map((c) => [c.id, c]));
   return data.sort((a, b) => (a.coach_id ? 1 : 0) - (b.coach_id ? 1 : 0) || a.display_name.localeCompare(b.display_name, 'tr'));
@@ -222,7 +222,7 @@ export function accountsHooks(me) {
         h('div.table-host', h('table.games.accounts',
           h('thead', h('tr', h('th', 'Antrenör'), h('th', 'Kullanıcı adı'), h('th', 'Hocası olduğu öğrenci'), h('th', ''))),
           h('tbody', coaches.map((c) => h('tr',
-            h('td', h('b', c.display_name), !c.coach_id ? h('span.chip.ok', { style: { marginLeft: '6px' } }, 'Başantrenör') : null),
+            h('td', h('b', c.display_name), (c.title || !c.coach_id) ? h('span.chip.ok', { style: { marginLeft: '6px' } }, c.title || 'Başantrenör') : null),
             h('td', '@' + c.username),
             h('td.num', count(c.id)),
             h('td.acc-actions', c.coach_id ? [
