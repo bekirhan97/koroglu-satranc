@@ -8,6 +8,7 @@ Güncellerken bütün dosyayı yeniden yazma; ilgili maddeyi düzenle.
 - Tablolar: `profiles` (rol coach/student, username, display_name, coach_id, group_name), `kv`, `assignments` (paket JSON), `assignment_targets`, `reports` (öğrencinin son raporu). RLS açık; yardımcı fonksiyonlar `private` şemasında.
 - Giriş: kullanıcı adı → `<ad>@kullanici.koroglu-satranc.app` (sahte e-posta, mail gitmez).
 - Edge Function **`hesap`** (`web/supabase/functions/hesap/index.ts`, verify_jwt kapalı, kendi yetki kontrolü var): `durum`, `kurulum` (yalnız hiç antrenör yokken), `ogrenci_ac`, `ogrenci_guncelle` (ad/grup/şifre, lesson_type, coach_ids), `ogrenci_sil`, `antrenor_ac/guncelle/sil` (yalnız başantrenör).
+- **Premove:** `core/board.js` → `new Board(host, { premove: true })` (açık: solver, storm, rush, play, endgame, `lichess-play.js`). Oyuncu hamle yapınca ya da `setPosition(fen, { premove: true })` (rakip sırada) çağrılınca `waitFen` tutulur, chessground premove'u kaydeder. Premove yalnız tahta `waitFen`'i ya da ondan tek hamleyle gelinen konumu gösterirken korunur; `setPosition(..., { interactive: true })`/`setInteractive(true)` onu `cg.playPremove()` ile oynar (normal hamle gibi `onMove`'a düşer). Başka konum (yanlış hamle geri alma, yeni bulmaca) ya da `setInteractive(false)` iptal eder. Stiller `styles.css` (`premove-dest`, `current-premove`).
 - Yayın: `main`'e push → `.github/workflows/web.yml` (test + `node scripts/build-web.mjs --minify` → GitHub Pages). Bulmacalar `data/puzzles.json` (6,7 MB).
 
 ## 2. aşama dosyaları

@@ -124,7 +124,7 @@ async function run(body, minutes, setActive) {
     h('div.storm-side', clock, h('div.storm-label', 'çözülen'), score, combo, flash, hist,
       h('button.btn.ghost', { onclick: () => end() }, 'Bitir'))));
   let idx = -1, p = null, step = 0, fens = [], ended = false, solverColor = 'w';
-  const board = new Board(boardHost, { onMove: (m) => onMove(m) });
+  const board = new Board(boardHost, { onMove: (m) => onMove(m), premove: true });
   const timer = setInterval(() => {
     if (!body.isConnected) { clearInterval(timer); return; }
     runState.tick();
@@ -172,7 +172,7 @@ async function run(body, minutes, setActive) {
         drawCombo();
         return nextPuzzle();
       }
-      board.setPosition(fenAfter, { lastMove: uci });
+      board.setPosition(fenAfter, { lastMove: uci, premove: true });
       setTimeout(() => { if (ended) return; board.setPosition(fens[step + 1], { lastMove: p.moves[step] }); step++; yourTurn(); }, 150);
     } else {
       runState.wrong(p);

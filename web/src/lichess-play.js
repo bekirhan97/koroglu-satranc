@@ -229,7 +229,7 @@ export default {
         h('div.storm-side', status, actions, moveList,
           h('button.btn.small.ghost.lp-leave', { onclick: showLobby, title: 'Oyun Lichess\'te sürer; süren oyunlardan geri dönebilirsin' }, '◂ Lobiye dön'))));
       let myColor = 'white', initialFen = new Chess().fen(), full = null, state = null, lastTick = Date.now(), over = false;
-      const board = new Board(boardHost, { onMove: (m) => sendMove(m.uci) });
+      const board = new Board(boardHost, { onMove: (m) => sendMove(m.uci), premove: true });
       const clockEl = { white: h('span.lp-clock'), black: h('span.lp-clock') };
       const timer = setInterval(() => drawClocks(), 200);
       cleanup.push(() => { clearInterval(timer); board.destroy(); });
@@ -261,7 +261,7 @@ export default {
         for (const u of mv) { const r = c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] }); sans.push(r ? r.san : u); last = u; }
         const myTurn = (c.turn() === 'w') === (myColor === 'white');
         over = st.status && !['started', 'created'].includes(st.status);
-        board.setPosition(c.fen(), { lastMove: last, interactive: !over && myTurn, animate: true });
+        board.setPosition(c.fen(), { lastMove: last, interactive: !over && myTurn, premove: !over && !myTurn, animate: true });
         clear(moveList).append(...sans.map((s, i) => h('span.mv', (i % 2 === 0 ? `${i / 2 + 1}. ` : '') + s)));
         moveList.scrollTop = moveList.scrollHeight;
         if (over) {
