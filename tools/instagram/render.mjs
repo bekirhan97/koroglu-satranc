@@ -127,8 +127,9 @@ export function renderSvg(spec) {
 
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
     `<defs><radialGradient id="g" cx="50%" cy="0%" r="90%"><stop offset="0" stop-color="${BRAND.bordo}"/><stop offset="0.55" stop-color="#2a0d12"/><stop offset="1" stop-color="${BRAND.ink}"/></radialGradient></defs>` +
-    `<rect width="${W}" height="${H}" fill="url(#g)"/>` +
-    `<image href="${LOGO}" x="48" y="34" width="120" height="120"/>` +
+    `<rect width="${W}" height="${H}" fill="url(#g)"/>`;
+  const bgLen = svg.length;
+  svg += `<image href="${LOGO}" x="48" y="34" width="120" height="120"/>` +
     `<text x="184" y="86" font-family="Inter" font-weight="800" font-size="30" fill="${BRAND.gold}" letter-spacing="1.5">KÖROĞLU SATRANÇ AKADEMİ</text>`;
   if (spec.tag) svg += `<text x="184" y="126" font-family="Inter" font-weight="600" font-size="25" fill="${BRAND.cream}" letter-spacing="2">${esc(spec.tag.toLocaleUpperCase('tr'))}</text>`;
   let y = 196;
@@ -151,7 +152,12 @@ export function renderSvg(spec) {
   svg += boardSvg(fen, bx, y + 8, boardSize, { flip, lastMove, marks: spec.marks || [], arrows: spec.arrows || [] });
   y += boardSize + 42;
   if (spec.choices) { svg += pills(spec.choices, y, W); y += 112; }
-  if (textLines.length) svg += textBlock(textLines, 60, y + textSize, textSize, textSize * 1.35, 400, BRAND.cream);
+  if (textLines.length) { svg += textBlock(textLines, 60, y + textSize, textSize, textSize * 1.35, 400, BRAND.cream); y += textLines.length * textSize * 1.35 + 30; }
+  if (spec.size === 'story') { // hikâyede içerik ortada (üstte/altta Instagram'ın düğmeleri var)
+    const dy = Math.max(0, (H - y) / 2 - 20);
+    svg = svg.slice(0, bgLen) + `<g transform="translate(0 ${dy})">` + svg.slice(bgLen) + (spec.footer ? `<text x="60" y="${y + 50}" font-family="Inter" font-weight="600" font-size="34" fill="${BRAND.gold}">${esc(spec.footer)}</text>` : '') + '</g>';
+    return svg + '</svg>';
+  }
   if (spec.footer) svg += `<text x="60" y="${H - 40}" font-family="Inter" font-weight="600" font-size="30" fill="${BRAND.gold}">${esc(spec.footer)}</text>`;
   if (spec.handle) svg += `<text x="${W - 60}" y="${H - 40}" font-family="Inter" font-weight="600" font-size="28" fill="${BRAND.muted}" text-anchor="end">${esc(spec.handle)}</text>`;
   return svg + '</svg>';
@@ -170,3 +176,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log(out);
   });
 }
+
+export { PIECES, LOGO, FONT_FILES };
