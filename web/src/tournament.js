@@ -483,7 +483,8 @@ export default {
           h('div.tg-head', h('h3', o.name, o.rating ? h('span.muted', ` (${o.rating})`) : null),
             h('div.muted.small', [o.club, o.fide_id ? h('a', { href: `https://ratings.fide.com/profile/${o.fide_id}`, target: '_blank', rel: 'noopener' }, 'FIDE profili') : null].filter(Boolean).reduce((a, x, i) => (i ? [...a, ' · ', x] : [x]), []))),
           h('div.btn-row', h('button.btn.small.primary', { onclick: () => prepDialog(o, gs) }, '♟ Hazırlık: Açılış Tekrarı\'na ekle'),
-            isCoach || o.created_by === me.id ? h('button.btn.small', { onclick: () => editOpponent(o) }, 'Düzenle') : null)),
+            isCoach || o.created_by === me.id ? h('button.btn.small', { onclick: () => editOpponent(o) }, 'Düzenle') : null,
+            isCoach ? h('button.btn.small.ghost', { onclick: () => deleteOpponent(o, gs.length) }, 'Sil') : null)),
         o.note ? h('div.panel.small', h('b', '📝 Not: '), o.note) : null,
         h('div.tg-stats', h('div.tg-stat', h('div.tg-stat-n', gs.length), h('div.muted.small', 'maç')), h('div.tg-stat', h('div.tg-stat-n', s.scored ? `${s.ourScore}/${s.scored}` : '–'), h('div.muted.small', 'bizim puanımız'))),
         h('div.tg-cols',
@@ -521,6 +522,17 @@ export default {
       } }] });
     }
     function localSanLine(s) { return s.replace(/([KQRBN])/g, (m) => ({ K: 'Ş', Q: 'V', R: 'K', B: 'F', N: 'A' })[m]); }
+
+    // Coach-only (RLS opp_delete). Games keep existing; their opponent link is cleared (FK ON DELETE SET NULL).
+    async function deleteOpponent(o, nGames) {
+      const msg = nGames
+        ? `"${o.name}" silinsin mi?\n\nBu rakibe bağlı ${nGames} maç silinmez ama rakip bilgisi boş kalır. Bu işlem geri alınamaz.`
+        : `"${o.name}" silinsin mi? Bu işlem geri alınamaz.`;
+      if (!confirm(msg)) return;
+      const { error } = await supa.from('opponents').delete().eq('id', o.id);
+      if (error) { toast(error.message, 'error'); return; }
+      toast('Rakip silindi', 'ok'); await store.load(true); showOpponents();
+    }
 
     function editOpponent(o) {
       const name = h('input', { value: o.name }), rating = h('input', { type: 'number', value: o.rating || '' }), fide = h('input', { value: o.fide_id || '' }), club = h('input', { value: o.club || '' });
