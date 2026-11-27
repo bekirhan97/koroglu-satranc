@@ -6,6 +6,7 @@ Bekir (akademi sahibi) ile Türkçe konuş; teknik terimleri sade anlat. Arayüz
 - **Masaüstü uygulaması** (Electron 33 + esbuild): `src/main` (ana süreç), `src/renderer/core` (ortak mantık), `src/renderer/modules/<id>` (modüller, `registry.js`). Sürüm 0.4.0. Mimari: claude.ai projesindeki `koroglu-satranc-mimari.md`.
 - **Öğrenci Sistemi (web)**: `web/` — https://ogrenci.koroglusatranc.com/ — masaüstü modüllerini tarayıcıda çalıştırır (`web/src/api.js` `window.api`'yi taklit eder), veri Supabase'de (proje `ajghkdqwgcgzscweckoo`, Frankfurt).
 - Ayrıntılar: `docs/teknik/web.md` (tablolar, RPC'ler, dosyalar), `docs/ozellikler.md` (kullanıcı gözünden her özellik). Önce ilgili bölümü ara (`grep`), bütün dosyayı okuma.
+- `tools/instagram/`: Instagram görsel aracı (Köroğlu renkli tahta görselleri; siteyle bağlantısı yok, yayına girmez). Kullanım `tools/instagram/README.md`.
 - Veri: `resources/puzzles.json` (60.653 Lichess bulmacası, puana göre sıralı), `endgames.json` (717), `strategy.json` (856). Büyük dosyaları `cat` etme; `python3 -c`/`node -e` ile özetle.
 
 ## Komutlar
