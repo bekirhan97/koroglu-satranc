@@ -8,7 +8,10 @@ cd tools/instagram && npm install            # bir kez
 node sec.mjs strateji --seviye 2 --adet 3    # aday göster (strateji | oyunsonu | bulmaca)
 node sec.mjs strateji --id st-b7acdb5551 --tarif out/t.json   # tarif yaz + kullanilanlar.txt'ye ekle
 node render.mjs out/t.json out/                # PNG'leri üret
+node kapak.mjs out/                            # öne çıkan hikâye kapakları
 ```
+
+Hikâye sürümü: tarifte `"size":"story"` (içerik dikeyde ortalanır, Instagram düğmelerine denk gelmez).
 
 `sec.mjs` seçenekleri: `--seviye 1–6`, `--bolum <id>` (strateji: merkez, piyon…; oyunsonu: mat, piyon, kale…),
 `--tema <lichess teması>` ve `--puan 1200-1600` (bulmaca), `--id`, `--adet`, `--handle "@hesap"`,
