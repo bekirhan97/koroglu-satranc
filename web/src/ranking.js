@@ -9,10 +9,10 @@ export const KINDS = [
   ['toplam', 'Genel puan (bütün çalışmalar)', 'Genel'],
   ['antrenman', 'Bulmaca antrenmanı', 'Bulmacalar'], ['storm3', 'Storm 3 dk', 'Bulmacalar'], ['storm5', 'Storm 5 dk', 'Bulmacalar'],
   ['rush3', 'Rush 3 dk', 'Bulmacalar'], ['rush5', 'Rush 5 dk', 'Bulmacalar'], ['survival', 'Rush – Hayatta kal', 'Bulmacalar'], ['streak', 'Streak', 'Bulmacalar'],
-  ['endgames', 'Oyunsonu', 'Çalışmalar'], ['videos', 'Videolar', 'Çalışmalar'], ['gtmGames', 'Hamleyi Tahmin Et', 'Çalışmalar'],
+  ['endgames', 'Oyunsonu', 'Çalışmalar'], ['strategy', 'Strateji', 'Çalışmalar'], ['videos', 'Videolar', 'Çalışmalar'], ['gtmGames', 'Hamleyi Tahmin Et', 'Çalışmalar'],
   ['openings', 'Açılış Tekrarı', 'Çalışmalar'], ['playGames', 'Pozisyondan Oyna', 'Çalışmalar'], ['lichessGames', "Lichess'te Oyna", 'Çalışmalar'],
 ];
-const COUNT_UNIT = { endgames: 'konum', videos: 'video', gtmGames: 'oyun', openings: 'pozisyon', playGames: 'oyun', lichessGames: 'oyun' };
+const COUNT_UNIT = { endgames: 'konum', strategy: 'soru', videos: 'video', gtmGames: 'oyun', openings: 'pozisyon', playGames: 'oyun', lichessGames: 'oyun' };
 const PERIODS = [['week', 'Bu hafta'], ['month', 'Bu ay'], ['all', 'Tüm zamanlar']];
 const unit = (kind, period) => (kind === 'toplam' ? 'puan' : COUNT_UNIT[kind] || (kind === 'antrenman' ? (period === 'all' ? 'puan' : 'bulmaca') : kind === 'streak' ? 'seri' : 'bulmaca'));
 

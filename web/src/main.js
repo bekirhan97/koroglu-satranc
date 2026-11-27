@@ -28,6 +28,7 @@ import { startErrorLog, recentErrors } from './errlog.js';
 import { coachAlerts } from './alerts.js';
 import { studyTab } from './study.js';
 import endgame from '../../src/renderer/modules/endgame/index.js';
+import strategy from './strategy.js';
 import { endgameHooks } from './endgame-web.js';
 import { lessonById } from '../../src/renderer/modules/endgame/curriculum.js';
 import { pushState, enablePush, disablePush, forgetDevice } from './push.js';
@@ -44,7 +45,7 @@ let mounted = null;
 let activeId = 'home';
 teacher.title = 'Antrenör';
 lichessPlay.short = 'Lichess'; gtm.short = 'Tahmin Et'; openings.short = 'Açılış'; play.short = 'Oyna'; puzzles.short = 'Bulmaca';
-const MODULES = [schedule, videos, puzzles, endgame, gtm, openings, play, lichessPlay, tournament, ranking, teacher];
+const MODULES = [schedule, videos, puzzles, endgame, strategy, gtm, openings, play, lichessPlay, tournament, ranking, teacher];
 const visibleModules = () => MODULES.filter((m) => !m.teacherOnly || (me && me.role === 'coach'));
 
 // ---------- login ----------

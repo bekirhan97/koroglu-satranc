@@ -435,3 +435,16 @@ table.lb tr.me td { background: #fff3d6; font-weight: 700; }
 .tg-tbl { width: 100%; border-collapse: collapse; }
 .tg-tbl th, .tg-tbl td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); }
 @media (max-width: 860px) { .tg-grid, .tg-entry, .tg-cols { grid-template-columns: 1fr; } .tg-side { min-width: 0; } }
+
+/* Strateji */
+.st-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.st-choice { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--line, #ddd); background: var(--card, #fff); font-size: 1.05rem; cursor: pointer; }
+.st-choice:hover:not(:disabled) { border-color: #3b6fd8; background: #eef3fd; }
+.st-choice:disabled { cursor: default; }
+.st-choice.ok { border-color: #2f8a35; background: #e5f4e4; color: #1f5f22; }
+.st-choice.bad { border-color: #c44; background: #fbebeb; color: #8a1c1c; }
+.st-mark { font-weight: 700; }
+.st-explain { display: flex; flex-direction: column; gap: 6px; }
+.st-why { padding: 9px 11px; border-radius: 10px; font-size: .92rem; line-height: 1.4; }
+.st-why.ok { background: #e5f4e4; }
+.st-why.bad { background: #fbf1f1; }

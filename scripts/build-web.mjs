@@ -18,6 +18,7 @@ await esbuild.build({
 });
 fs.copyFileSync('resources/puzzles.json', out + '/data/puzzles.json');
 fs.copyFileSync('resources/endgames.json', out + '/data/endgames.json');
+fs.copyFileSync('resources/strategy.json', out + '/data/strategy.json');
 fs.copyFileSync('resources/openings.json', out + '/data/openings.json');
 fs.copyFileSync('resources/miniatures.pgn', out + '/data/miniatures.pgn');
 fs.cpSync('resources/maia', out + '/data/maia', { recursive: true });

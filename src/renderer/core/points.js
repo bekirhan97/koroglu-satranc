@@ -6,6 +6,7 @@ export const POINTS = [
   ['reviews', 'Bulmaca tekrarı', 1, 30, 'tekrar'],
   ['openings', 'Açılış Tekrarı', 1, 30, 'pozisyon'],
   ['endgames', 'Oyunsonu', 5, 10, 'konum'],
+  ['strategy', 'Strateji', 3, 20, 'soru'],
   ['videos', 'Video', 10, 3, 'video'],
   ['gtmGames', 'Hamleyi Tahmin Et', 15, 3, 'oyun'],
   ['playGames', 'Pozisyondan Oyna', 8, 5, 'oyun'],

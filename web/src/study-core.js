@@ -34,11 +34,12 @@ export const COLS = [
   ['playGames', 'Motor/Maia', 'Pozisyondan Oyna (oyun)'],
   ['videos', 'Video', 'İzlenen video'],
   ['endgames', 'Oyunsonu', 'Bitirilen oyunsonu dersi'],
+  ['strategy', 'Strateji', 'Çözülen strateji sorusu'],
   ['lichess', 'Lichess', 'Lichess maçı (istenince sayılır)'],
   ['days', 'Aktif gün', 'Çalıştığı gün sayısı'],
   ['lessons', 'Ders', 'Derse katılım (geldi / ders)'],
 ];
-const ACT = ['puzzles', 'reviews', 'openings', 'gtmGames', 'playGames', 'videos', 'endgames'];
+const ACT = ['puzzles', 'reviews', 'openings', 'gtmGames', 'playGames', 'videos', 'endgames', 'strategy'];
 
 // rep: the student's latest report; scores: [{student_id, created_at}]; attendance: [{student_id, status, date}]
 export function studentRow(st, rep, { from, to, scores = [], attendance = [], lichess = null }) {
