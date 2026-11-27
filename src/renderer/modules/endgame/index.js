@@ -62,7 +62,7 @@ export function playLesson(root, lesson, nav = {}) {
     lesson.text ? h('p.egp-text', lesson.text) : null,
     status, doneBox, actions, movesEl, meta, navRow);
   clear(root).append(h('div.egp', boardHost, panel));
-  const board = new Board(boardHost, { orientation: student === 'w' ? 'white' : 'black', onMove: (m) => onStudentMove(m) });
+  const board = new Board(boardHost, { orientation: student === 'w' ? 'white' : 'black', onMove: (m) => onStudentMove(m), premove: true });
   setTimeout(() => board.refresh(), 60);
   const say = (text, kind = '') => { status.className = 'egp-status' + (kind ? ' ' + kind : ''); status.textContent = text; };
   const showMoves = () => {

@@ -242,7 +242,7 @@ class GameView {
       h('div.gtm-left', this.infoHost),
       h('div.gtm-center', bar(oppColor, opponentName(g.opp)), this.boardHost, bar(g.userColor, store.profile.name), this.statusEl, this.controls),
       h('div.gtm-right', h('div.panel-title', 'Hamleler'), this.movesHost, this.navRow(), this.live.button, this.live.el)));
-    this.board = new Board(this.boardHost, { orientation: g.userColor === 'w' ? 'white' : 'black', onMove: (m) => this.onUserMove(m) });
+    this.board = new Board(this.boardHost, { orientation: g.userColor === 'w' ? 'white' : 'black', onMove: (m) => this.onUserMove(m), premove: true });
     this.keyHandler = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === 'ArrowLeft') this.browse(-1); else if (e.key === 'ArrowRight') this.browse(1);
@@ -319,7 +319,8 @@ class GameView {
     const idx = this.view == null ? fens.length - 1 : this.view;
     const live = this.view == null;
     const interactive = live && g.status === 'active' && this.isUserTurn() && !this.thinking;
-    this.board.setPosition(fens[idx], { lastMove: idx > 0 ? g.moves[idx - 1] : undefined, interactive, animate: true });
+    const premove = live && g.status === 'active' && !this.isUserTurn(); // queue a move while the opponent thinks
+    this.board.setPosition(fens[idx], { lastMove: idx > 0 ? g.moves[idx - 1] : undefined, interactive, premove, animate: true });
     if (g.status === 'done' || !live) this.live.setPosition(fens[idx]);
     // moves list
     const host = clear(this.movesHost);

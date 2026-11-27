@@ -148,7 +148,7 @@ async function runSeq(body, mode, { setActive, back }) {
     h('div.storm-side', cfg.minutes ? clock : null, lives, h('div.storm-label', cfg.kind === 'streak' ? 'seri' : 'çözülen'), score, flash, hist,
       h('div.btn-row', skipBtn, h('button.btn.ghost', { onclick: () => end() }, 'Bitir')))));
   let idx = -1, p = null, step = 0, fens = [], ended = false, solverColor = 'w';
-  const board = new Board(boardHost, { onMove: (m) => onMove(m) });
+  const board = new Board(boardHost, { onMove: (m) => onMove(m), premove: true });
   const timer = cfg.minutes ? setInterval(() => {
     if (!body.isConnected) { clearInterval(timer); return; }
     R.tick();
@@ -187,7 +187,7 @@ async function runSeq(body, mode, { setActive, back }) {
         say('✓', 'good');
         return nextPuzzle();
       }
-      board.setPosition(fenAfter, { lastMove: uci });
+      board.setPosition(fenAfter, { lastMove: uci, premove: true });
       setTimeout(() => { if (ended) return; board.setPosition(fens[step + 1], { lastMove: p.moves[step] }); step++; yourTurn(); }, 200);
     } else {
       R.wrong(p);

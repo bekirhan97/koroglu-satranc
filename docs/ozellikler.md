@@ -33,6 +33,7 @@ Bu dosya o notun eski "Nasıl kullanılır" bölümüdür (27.11.2026'da taşın
 
 ## Çalışma bölümleri (öğrenci)
 - **Bulmacalar:** puanlı antrenman, ⚡ Storm (3/5 dk), 🏃 Rush (3 can; 3 dk, 5 dk, Hayatta kal), 🔥 Streak (ilk yanlışta biter, 1 atlama), Tekrar, Temalar, Setlerim, İstatistikler; **Oyunlarım** (son 30 Lichess oyunundaki hatalardan + turnuva maçı hatalarından bulmaca). Storm/Rush/Streak puanı değiştirmez, günlük hedefe sayılır. Bulmaca verisi (~6,7 MB) girişten 5 sn sonra arka planda iner; ilerleme ve "Tekrar dene" var.
+- **Premove (ön hamle):** rakip oynarken hamle sıraya konur (yeşil kareler), rakip oynayınca hemen oynanır; boş kareye tıklayınca iptal. Bulmacalar (antrenman, Storm, Rush/Streak), Pozisyondan Oyna, Oyunsonu ve Lichess'te Oyna'da açık; sınav, Tahmin Et ve açılış tekrarında kapalı. Yanlış hamleyle konum geri alınırsa ya da premove geçersiz kalırsa sessizce düşer.
 - **Videolar:** "+ Video ekle" (YouTube liste dışı, başlık, konu, not). %85 izlenince ya da "İzledim" ile sayılır; antrenör "X/Y öğrenci izledi" görür.
 - **Hamleyi Tahmin Et:** PGN içe aktar ya da 📚 Hazır koleksiyonlar. Ödeve eklemeden önce **"Önceden analiz et"** (yoksa öğrencinin telefonu analiz eder, yavaş).
 - **Açılış Tekrarı:** repertuvar içe aktar (PGN, varyantlı), aralıklı tekrar.
