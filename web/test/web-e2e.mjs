@@ -504,6 +504,20 @@ console.log('  ilerleme:', (await e.locator('.eg-hero').textContent().catch(() =
 await e.click('.tab:has-text("Bulmacalar")'); await e.waitForTimeout(500);
 await e.click('.eg-tile:has-text("Kale oyunsonu")'); await e.waitForTimeout(4000);
 console.log('  kale oyunsonu bulmacası:', await e.locator('.pz-bar select').first().inputValue().catch(() => 'yok'));
+step('bulmaca yüklenemezse (bağlantı yok → Tekrar dene)');
+{
+  const f = await newPage();
+  await f.route('**/data/puzzles.json', (r) => r.abort());
+  await f.goto(URL); await f.waitForTimeout(1500);
+  await f.fill('input[placeholder="Kullanıcı adı"]', studentUser); await f.fill('input[placeholder="Şifre"]', studentPass);
+  await f.click('button:has-text("Giriş yap")'); await f.waitForSelector('.home', { timeout: 20000 });
+  await nav(f, 'Bulmacalar'); await f.waitForSelector('button:has-text("Tekrar dene")', { timeout: 20000 });
+  console.log('  hata ekranı:', (await f.locator('.module-body .empty').textContent()).slice(0, 90));
+  await f.unroute('**/data/puzzles.json');
+  await f.click('button:has-text("Tekrar dene")'); await f.waitForSelector('cg-board', { timeout: 30000 });
+  console.log('  tekrar deneyince bulmaca geldi');
+  await f.context().close();
+}
 step('strateji');
 await nav(e, 'Strateji'); await e.waitForTimeout(1500);
 console.log('  strateji bölümleri:', await e.locator('.eg-tile').count(), '·', (await e.locator('.eg-hero').textContent()).replace(/\s+/g, ' ').slice(0, 80));

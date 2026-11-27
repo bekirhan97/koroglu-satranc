@@ -39,11 +39,24 @@ export default {
     window.addEventListener('ratings-changed', refreshPill);
 
     const loading = (text) => clear(body).append(h('div.empty', text));
+    // Loads the puzzle database with a visible progress and a retry button (slow phones / bad connections).
+    async function ensureDb(retry) {
+      if (pdata.db) return true;
+      const msg = h('div.empty', 'Bulmacalar yükleniyor…');
+      clear(body).append(msg);
+      const onProg = (e) => { msg.textContent = `Bulmacalar yükleniyor… ${e.detail.mb.toFixed(1).replace('.', ',')} / ~6,7 MB`; };
+      window.addEventListener('puzzles-progress', onProg);
+      try { await pdata.loadDb(); return true; } catch (e) {
+        clear(body).append(h('div.empty', h('p', e.message || 'Bulmacalar yüklenemedi.'), h('p.muted.small', 'İnternet bağlantını kontrol edip tekrar dene.'),
+          h('button.btn.primary', { onclick: retry }, '↻ Tekrar dene')));
+        return false;
+      } finally { window.removeEventListener('puzzles-progress', onProg); }
+    }
 
     // ---------- rated training ----------
     async function showTrain() {
       setTabs('train'); swap(null);
-      if (!pdata.db) { loading('Bulmacalar yükleniyor…'); await pdata.loadDb(); }
+      if (!(await ensureDb(showTrain))) return;
       next();
     }
     function next() {
@@ -129,7 +142,7 @@ export default {
     // ---------- themes ----------
     async function showThemes() {
       setTabs('themes'); swap(null);
-      if (!pdata.db) { loading('Bulmacalar yükleniyor…'); await pdata.loadDb(); }
+      if (!(await ensureDb(showThemes))) return;
       const counts = themeCounts();
       const perf = themePerf();
       const ta = themeAnalysis(pdata.history, store.profile.ratings.puzzles.r);

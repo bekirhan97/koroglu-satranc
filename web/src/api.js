@@ -74,14 +74,39 @@ function download(name, blob) {
 }
 
 let puzzleText = null;
+async function loadPuzzleText() {
+  const ctl = new AbortController();
+  let timer = setTimeout(() => ctl.abort(), 25000);
+  const poke = () => { clearTimeout(timer); timer = setTimeout(() => ctl.abort(), 25000); };
+  try {
+    const r = await fetch('data/puzzles.json', { signal: ctl.signal });
+    if (!r.ok) throw new Error('Bulmacalar yüklenemedi (' + r.status + ')');
+    if (!r.body || !r.body.getReader) return await r.text();
+    const reader = r.body.getReader(), parts = [];
+    let n = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value); n += value.length; poke();
+      window.dispatchEvent(new CustomEvent('puzzles-progress', { detail: { mb: n / 1048576 } }));
+    }
+    const all = new Uint8Array(n); let o = 0;
+    for (const p of parts) { all.set(p, o); o += p.length; }
+    return new TextDecoder().decode(all);
+  } catch (e) {
+    throw new Error(e && e.name === 'AbortError' ? 'Bağlantı çok yavaş: bulmacalar indirilemedi.' : e instanceof TypeError ? 'Bağlantı sorunu: bulmacalar indirilemedi.' : (e && e.message) || 'Bulmacalar yüklenemedi');
+  } finally { clearTimeout(timer); }
+}
 
 window.api = {
   web: true,
   read: async (key, def) => (cache.has(key) ? clone(cache.get(key)) : def),
   write: async (key, value) => { cache.set(key, clone(value)); schedule(key); return true; },
   remove: async (key) => { cache.delete(key); schedule(key, 0); return true; },
-  puzzles: async () => {
-    if (!puzzleText) puzzleText = await fetch('data/puzzles.json').then((r) => { if (!r.ok) throw new Error('Bulmacalar yüklenemedi'); return r.text(); });
+  // ~6,7 MB (≈2,8 MB sıkıştırılmış): one shared download per page; progress → 'puzzles-progress' {mb}; one retry;
+  // a stalled connection (nothing for 25 s) fails instead of spinning for ever.
+  puzzles: () => {
+    if (!puzzleText) puzzleText = loadPuzzleText().catch(() => loadPuzzleText()).catch((e) => { puzzleText = null; throw e; });
     return puzzleText;
   },
   openings: async () => fetch('data/openings.json').then((r) => r.json()),

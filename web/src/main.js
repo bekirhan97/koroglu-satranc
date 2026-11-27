@@ -138,6 +138,8 @@ async function start() {
   window.webHooks = me.role === 'coach' ? accountsHooks(me) : null;
   if (window.webHooks) window.webHooks.studyTab = studyTab;
   window.endgameHooks = endgameHooks(me);
+  // download the puzzle database in the background so Bulmacalar opens at once (slow phones)
+  setTimeout(() => { window.api.puzzles().catch(() => {}); }, 5000);
   loadOpenings().catch(() => {});
   const lr = await finishLink();
   if (lr && lr.error) toast(lr.error, 'error');

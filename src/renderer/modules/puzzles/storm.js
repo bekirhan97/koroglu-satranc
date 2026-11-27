@@ -108,7 +108,9 @@ export async function showStorm(body, { setActive }) {
 }
 
 async function run(body, minutes, setActive) {
-  const db = await pdata.loadDb();
+  let db;
+  if (!pdata.db) clear(body).append(h('div.empty', 'Bulmacalar yükleniyor…'));
+  try { db = await pdata.loadDb(); } catch (e) { clear(body).append(h('div.empty', (e.message || 'Bulmacalar yüklenemedi.') + ' Sekmeye tekrar dokunup yeniden dene.')); return; }
   const list = stormPuzzles(db);
   const runState = new StormRun(minutes);
   const boardHost = h('div.board-host');
